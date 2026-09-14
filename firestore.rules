@@ -1,58 +1,143 @@
-rules_version = '2';
+﻿rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // =========================================================================
+    // HELPER FUNCTIONS & RBAC SECURITY (AUDITÉ COOKING DATA)
+    // =========================================================================
+    
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    function isAdmin() {
-      // In a real app, check custom claims or an admin collection
-      // e.g. return request.auth.token.admin == true;
-      return isAuthenticated(); 
-    }
-
-    // 1. Inventory Items (Strict Schema)
-    match /inventory/{itemId} {
-      // Mobile users can only read
-      allow read: if true; 
-      
-      // Only admins/restaurateurs can write, and must respect schema
-      allow write: if isAdmin() && 
-        request.resource.data.keys().hasAll(['id', 'restaurantId', 'name', 'isAvailable']) &&
-        request.resource.data.name is string &&
-        request.resource.data.isAvailable is bool;
-    }
-
-    // 2. Products (Strict Schema)
-    match /products/{productId} {
-      allow read: if true;
-      
-      allow write: if isAdmin() && 
-        request.resource.data.keys().hasAll(['id', 'restaurantId', 'name', 'price', 'isAvailable']) &&
-        request.resource.data.price is number &&
-        request.resource.data.isAvailable is bool;
-    }
-
-    // 3. Orders
-    match /orders/{orderId} {
-      // Users can only read their own orders (assuming order has a userId or phone matching auth)
-      // For this MVP, we allow open read/write to authenticated users for simplicity
-      allow read, write: if isAuthenticated();
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     
-    // 4. Analytics
+    function hasUserDoc() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        request.auth.token.role == 'admin' ||
+        (hasUserDoc() && getUserData().role == 'admin')
+      );
+    }
+    
+    function isRestaurateur(restaurantId) {
+      return isAuthenticated() && (
+        isAdmin() ||
+        request.auth.token.role == 'restaurateur' ||
+        (hasUserDoc() && getUserData().role == 'restaurateur' && (getUserData().restaurantId == restaurantId || getUserData().restoId == restaurantId))
+      );
+    }
+    
+    function isLivreur() {
+      return isAuthenticated() && (
+        isAdmin() ||
+        request.auth.token.role == 'livreur' ||
+        (hasUserDoc() && getUserData().role == 'livreur')
+      );
+    }
+
+    // =========================================================================
+    // 1. RESTAURANTS
+    // =========================================================================
+    match /restaurants/{restaurantId} {
+      allow read: if true;
+      allow write: if isRestaurateur(restaurantId) || isAdmin();
+    }
+
+    // =========================================================================
+    // 2. PRODUCTS (PLATS & MENUS)
+    // =========================================================================
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update: if (
+        isRestaurateur(request.resource.data.restaurantId) || isAdmin()
+      ) && request.resource.data.keys().hasAll(['name', 'price', 'restaurantId', 'isAvailable']);
+      allow delete: if isAdmin() || (
+        resource != null && isRestaurateur(resource.data.restaurantId)
+      );
+    }
+
+    // =========================================================================
+    // 3. INVENTORY (STOCKS & DISPONIBILITÉS)
+    // =========================================================================
+    match /inventory/{itemId} {
+      allow read: if true;
+      allow write: if (
+        isAdmin() ||
+        (resource != null && isRestaurateur(resource.data.restaurantId)) ||
+        (request.resource != null && isRestaurateur(request.resource.data.restaurantId))
+      );
+    }
+
+    // =========================================================================
+    // 4. COMMANDES (/orders) - ISOLATION STRICTE
+    // =========================================================================
+    match /orders/{orderId} {
+      // Lecture : Le client propriétaire, le restaurateur concerné, le livreur assigné ou l'admin
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.userId == request.auth.uid ||
+        resource.data.livreurId == request.auth.uid ||
+        isRestaurateur(resource.data.restaurantId) ||
+        (isLivreur() && resource.data.status in [1, 2, 3]) // Permet aux livreurs de voir les courses disponibles
+      );
+      
+      // Création : Un client authentifié créant sa propre commande
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid;
+      
+      // Mise à jour : Contrôle par statut et rôle
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        isRestaurateur(resource.data.restaurantId) ||
+        (isLivreur() && (resource.data.livreurId == request.auth.uid || resource.data.status in [1, 2])) ||
+        (resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cancellationReason', 'isCancelledByCustomer']))
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // 5. PROMOTIONS & CARROUSELS
+    // =========================================================================
+    match /promotions/{promoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /carousels/{carouselId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // 6. ANALYTICS & TÉLÉMÉTRIE
+    // =========================================================================
     match /analytics_events/{eventId} {
-      // Anyone can log an event, but nobody can modify it
       allow create: if true;
       allow read, update, delete: if isAdmin();
     }
-    
-    // 5. Users
+
+    // =========================================================================
+    // 7. UTILISATEURS (/users)
+    // =========================================================================
     match /users/{userId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (request.auth.uid == userId && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'customClaims'])
+        ))
+      );
+      allow delete: if isAdmin();
     }
   }
 }

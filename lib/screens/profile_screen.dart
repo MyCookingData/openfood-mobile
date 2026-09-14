@@ -448,7 +448,78 @@ class _ProfileScreenState extends State<ProfileScreen> {
               icon: const Icon(Icons.delete_forever),
               label: const Text("Purger et Réinitialiser la BDD",
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            ).animate().fade(),
+            const SizedBox(height: 28),
+
+            // --- Signature & Attribution Cooking Data ---
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: AppTheme.gold.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.rocket_launch_rounded, color: AppTheme.gold, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Développé par Cooking Data",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Text(
+                              "Créateur de solutions informatiques sur-mesure",
+                              style: TextStyle(
+                                color: Colors.white60,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "Besoin d'une application mobile, d'un tableau de bord ou d'une IA pour votre entreprise ?",
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: 11,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    "🌐 Visitez cookingdata.fr • Martinique 🇲🇶",
+                    style: TextStyle(
+                      color: AppTheme.greenXl,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ).animate().fade(delay: 400.ms),
+
             const SizedBox(height: 120), // Espace pour BottomNavBar
           ],
         ),
