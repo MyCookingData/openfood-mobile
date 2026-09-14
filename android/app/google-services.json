@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "178517740611",
+    "project_id": "app-openfood",
+    "storage_bucket": "app-openfood.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:178517740611:android:cfafa8d6ddf9e06759d8f6",
+        "android_client_info": {
+          "package_name": "com.openfood.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "178517740611-ilqs7cmh9klfphkv43g7a8l9b4ea4i5r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7OZDdwQ98ahlONONb_LZTZjWISEWxGoY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "178517740611-ilqs7cmh9klfphkv43g7a8l9b4ea4i5r.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "178517740611-14cnsfhnmcsiold7q7ujefp04qikoqes.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.openfood.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

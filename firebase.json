@@ -1,0 +1,19 @@
+{
+  "functions": {
+    "source": "functions"
+  },
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "app-openfood",
+          "configurations": {
+            "android": "1:178517740611:android:cfafa8d6ddf9e06759d8f6",
+            "ios": "1:178517740611:ios:c9f97d98c28246a859d8f6",
+            "web": "1:178517740611:web:09dfba077107c07f59d8f6"
+          }
+        }
+      }
+    }
+  }
+}
