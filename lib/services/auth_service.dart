@@ -416,7 +416,7 @@ class AuthService {
       case 'invalid-email':
         return Exception("L'adresse e-mail saisie n'a pas un format valide (ex: contact@domaine.fr).");
       case 'operation-not-allowed':
-        return Exception("L'authentification par e-mail/mot de passe n'est pas activée sur le serveur.");
+        return Exception("L'authentification par SMS (Téléphone) n'est pas activée sur la console Firebase du projet (Authentication > Sign-in method > Téléphone).");
       case 'network-request-failed':
         return Exception("Impossible de joindre les serveurs OpenFood. Veuillez vérifier votre connexion internet.");
       case 'too-many-requests':
