@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:openfood_models/openfood_models.dart';
 import '../services/carousel_service.dart';
 import '../core/theme.dart';
@@ -70,11 +71,64 @@ class _HomeCarouselWidgetState extends State<HomeCarouselWidget> {
 
   void _handleAction(CarouselModel carousel) async {
     if (carousel.actionType == CarouselActionType.open_restaurant) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => 
-          RestoScreen(restaurantName: carousel.actionPayload ?? 'Inconnu')));
+      final payload = carousel.actionPayload ?? carousel.targetRestaurantId;
+      if (payload == null || payload.isEmpty) return;
+
+      try {
+        final restoDoc = await FirebaseFirestore.instance.collection('restaurants').doc(payload).get();
+        if (restoDoc.exists && mounted) {
+          final data = restoDoc.data()!;
+          final name = (data['name'] as String?) ?? payload;
+          Navigator.push(context, MaterialPageRoute(builder: (_) => 
+              RestoScreen(restaurantName: name, restaurantId: restoDoc.id)));
+          return;
+        }
+      } catch (_) {}
+
+      if (mounted) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => 
+            RestoScreen(restaurantName: payload)));
+      }
     } else if (carousel.actionType == CarouselActionType.open_product) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => 
-          ExplorerScreen(category: carousel.actionPayload ?? 'Tout')));
+      final payload = carousel.actionPayload;
+      if (payload == null || payload.isEmpty) return;
+
+      try {
+        // 1. Chercher le document produit
+        final prodDoc = await FirebaseFirestore.instance.collection('products').doc(payload).get();
+        if (prodDoc.exists && mounted) {
+          final prodData = prodDoc.data()!;
+          final rId = prodData['restaurantId'] as String? ?? carousel.targetRestaurantId;
+          if (rId != null && rId.isNotEmpty) {
+            final restoDoc = await FirebaseFirestore.instance.collection('restaurants').doc(rId).get();
+            final rName = (restoDoc.data()?['name'] as String?) ?? 'Restaurant';
+            if (mounted) {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => 
+                  RestoScreen(restaurantName: rName, restaurantId: rId)));
+              return;
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 2. Fallback via targetRestaurantId de la bannière
+      if (carousel.targetRestaurantId != null && carousel.targetRestaurantId!.isNotEmpty && mounted) {
+        try {
+          final restoDoc = await FirebaseFirestore.instance.collection('restaurants').doc(carousel.targetRestaurantId!).get();
+          final rName = (restoDoc.data()?['name'] as String?) ?? 'Restaurant';
+          if (mounted) {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => 
+                RestoScreen(restaurantName: rName, restaurantId: carousel.targetRestaurantId)));
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // 3. Fallback Explorer
+      if (mounted) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => 
+            const ExplorerScreen(category: 'Tout')));
+      }
     } else if (carousel.actionType == CarouselActionType.open_url) {
       if (carousel.actionPayload != null) {
         final url = Uri.parse(carousel.actionPayload!);
@@ -124,6 +178,8 @@ class _HomeCarouselWidgetState extends State<HomeCarouselWidget> {
                     gradientColors: _parseColors(carousel.gradientColorsHex),
                     ctaText: carousel.ctaText,
                     isSponsored: carousel.isSponsored,
+                    imageUrl: carousel.imageUrl,
+                    logoUrl: carousel.logoUrl,
                   ),
                 ).animate().fade(duration: 400.ms, delay: (index * 100).ms).slideX(begin: 0.1, curve: Curves.easeOutQuad),
               );

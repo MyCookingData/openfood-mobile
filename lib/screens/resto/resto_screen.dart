@@ -18,7 +18,8 @@ import 'widgets/hero_slider.dart';
 
 class RestoScreen extends StatefulWidget {
   final String restaurantName;
-  const RestoScreen({super.key, this.restaurantName = 'Open Food'});
+  final String? restaurantId;
+  const RestoScreen({super.key, this.restaurantName = 'Open Food', this.restaurantId});
 
   @override
   State<RestoScreen> createState() => _RestoScreenState();
@@ -35,11 +36,29 @@ class _RestoScreenState extends State<RestoScreen> {
   @override
   void initState() {
     super.initState();
-    _restaurantFuture = FirebaseFirestore.instance
-        .collection('restaurants')
-        .where('name', isEqualTo: widget.restaurantName)
-        .limit(1)
-        .get();
+    if (widget.restaurantId != null && widget.restaurantId!.isNotEmpty) {
+      _restaurantFuture = FirebaseFirestore.instance
+          .collection('restaurants')
+          .where(FieldPath.documentId, isEqualTo: widget.restaurantId)
+          .limit(1)
+          .get()
+          .then((snap) {
+            if (snap.docs.isEmpty) {
+              return FirebaseFirestore.instance
+                  .collection('restaurants')
+                  .where('name', isEqualTo: widget.restaurantName)
+                  .limit(1)
+                  .get();
+            }
+            return snap;
+          });
+    } else {
+      _restaurantFuture = FirebaseFirestore.instance
+          .collection('restaurants')
+          .where('name', isEqualTo: widget.restaurantName)
+          .limit(1)
+          .get();
+    }
     _itemPositionsListener.itemPositions.addListener(_onPositionsChanged);
   }
 
@@ -438,6 +457,8 @@ class _RestoScreenState extends State<RestoScreen> {
                                         .toList(),
                                     ctaText: c.ctaText,
                                     isSponsored: c.isSponsored,
+                                    imageUrl: c.imageUrl,
+                                    logoUrl: c.logoUrl,
                                   ),
                                 );
                               }).toList(),
