@@ -1,4 +1,4 @@
-﻿rules_version = '2';
+rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -84,6 +84,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         isAdmin() ||
         resource.data.userId == request.auth.uid ||
+        resource.data.driverId == request.auth.uid ||
         resource.data.livreurId == request.auth.uid ||
         isRestaurateur(resource.data.restaurantId) ||
         (isLivreur() && resource.data.status in [1, 2, 3]) // Permet aux livreurs de voir les courses disponibles
@@ -97,7 +98,11 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         isAdmin() ||
         isRestaurateur(resource.data.restaurantId) ||
-        (isLivreur() && (resource.data.livreurId == request.auth.uid || resource.data.status in [1, 2])) ||
+        (isLivreur() && (
+          resource.data.driverId == request.auth.uid || 
+          resource.data.livreurId == request.auth.uid || 
+          resource.data.status in [1, 2]
+        )) ||
         (resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cancellationReason', 'isCancelledByCustomer']))
       );
       
@@ -121,7 +126,7 @@ service cloud.firestore {
     // 6. ANALYTICS & TÉLÉMÉTRIE
     // =========================================================================
     match /analytics_events/{eventId} {
-      allow create: if true;
+      allow create: if isAuthenticated();
       allow read, update, delete: if isAdmin();
     }
 
@@ -130,7 +135,10 @@ service cloud.firestore {
     // =========================================================================
     match /users/{userId} {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
-      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow create: if isAuthenticated() && request.auth.uid == userId &&
+        (!('role' in request.resource.data) || request.resource.data.role == 'client') &&
+        (!('isAdmin' in request.resource.data) || request.resource.data.isAdmin == false) &&
+        !('customClaims' in request.resource.data);
       allow update: if isAuthenticated() && (
         isAdmin() ||
         (request.auth.uid == userId && (
