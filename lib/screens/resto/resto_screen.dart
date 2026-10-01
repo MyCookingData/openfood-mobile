@@ -238,12 +238,16 @@ class _RestoScreenState extends State<RestoScreen> {
               String restaurantId = widget.restaurantName;
               String restoZone = "";
               String restoImage = "";
+              String restoType = "";
+              double? restoRating;
               if (restoSnap.hasData && restoSnap.data!.docs.isNotEmpty) {
                 final doc = restoSnap.data!.docs.first;
                 restaurantId = doc.id;
                 final rd = doc.data() as Map<String, dynamic>;
-                restoZone = rd['zone'] ?? "";
-                restoImage = rd['image'] ?? "";
+                restoZone = (rd['zone'] ?? rd['address'] ?? "").toString();
+                restoImage = (rd['imageUrl'] ?? rd['image'] ?? rd['coverImage'] ?? rd['photo'] ?? "").toString();
+                restoType = (rd['type'] ?? "").toString();
+                restoRating = (rd['rating'] as num?)?.toDouble();
               }
 
               return StreamBuilder<QuerySnapshot>(
@@ -262,6 +266,17 @@ class _RestoScreenState extends State<RestoScreen> {
 
               final docs = snapshot.data?.docs ?? [];
 
+              if (restoImage.isEmpty && docs.isNotEmpty) {
+                for (var d in docs) {
+                  final pData = d.data() as Map<String, dynamic>;
+                  final pImg = (pData['image'] ?? pData['imageUrl'] ?? '').toString();
+                  if (pImg.isNotEmpty) {
+                    restoImage = pImg;
+                    break;
+                  }
+                }
+              }
+
               Map<String, List<QueryDocumentSnapshot>> byCategory = {};
               for (var doc in docs) {
                 final data = doc.data() as Map<String, dynamic>;
@@ -273,9 +288,9 @@ class _RestoScreenState extends State<RestoScreen> {
               List<QueryDocumentSnapshot> bestsellers = docs.take(min(3, docs.length)).toList();
 
               _navCategories = [];
-              if (bestsellers.isNotEmpty) _navCategories.add("⭐ Bestsellers");
+              if (bestsellers.isNotEmpty) _navCategories.add("Bestsellers");
               for (var c in rawCategories) {
-                _navCategories.add("🍽️ $c");
+                _navCategories.add(c);
               }
 
               List<Widget> listItems = [];
@@ -402,6 +417,8 @@ class _RestoScreenState extends State<RestoScreen> {
                               return HeroSlider(
                                 restaurantName: widget.restaurantName,
                                 zone: restoZone,
+                                type: restoType,
+                                rating: restoRating,
                                 imageUrl: restoImage,
                               );
                             }

@@ -3,13 +3,15 @@ import '../core/theme.dart';
 
 class CategoryIcon extends StatelessWidget {
   final String label;
-  final String icon;
+  final String? icon;
+  final IconData? iconData;
   final bool isSelected;
 
   const CategoryIcon({
     super.key,
     required this.label,
-    required this.icon,
+    this.icon,
+    this.iconData,
     this.isSelected = false,
   });
 
@@ -47,10 +49,16 @@ class CategoryIcon extends StatelessWidget {
                   : null,
             ),
             child: Center(
-              child: Text(
-                icon,
-                style: const TextStyle(fontSize: 23),
-              ),
+              child: iconData != null
+                  ? Icon(
+                      iconData,
+                      color: isSelected ? Colors.white : AppTheme.cream,
+                      size: 22,
+                    )
+                  : Text(
+                      icon ?? '',
+                      style: const TextStyle(fontSize: 23),
+                    ),
             ),
           ),
           const SizedBox(height: 5),
@@ -67,4 +75,3 @@ class CategoryIcon extends StatelessWidget {
     );
   }
 }
-

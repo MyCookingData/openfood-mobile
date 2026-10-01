@@ -139,18 +139,19 @@ class BannerCard extends StatelessWidget {
               ),
             ],
           ),
-          // Emoji
-          Positioned(
-            right: -8,
-            top: 6,
-            child: Text(
-              emoji,
-              style: const TextStyle(
-                fontSize: 70,
-                shadows: [Shadow(color: Colors.black54, blurRadius: 18, offset: Offset(0, 8))],
+          // Optional Graphic
+          if (emoji.isNotEmpty)
+            Positioned(
+              right: -8,
+              top: 6,
+              child: Text(
+                emoji,
+                style: const TextStyle(
+                  fontSize: 70,
+                  shadows: [Shadow(color: Colors.black54, blurRadius: 18, offset: Offset(0, 8))],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

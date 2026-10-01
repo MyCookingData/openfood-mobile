@@ -228,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 child: Row(
                                   children: [
-                                    const Text("📍", style: TextStyle(fontSize: 15)),
+                                    const Icon(Icons.location_on, color: AppTheme.greenXl, size: 16),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Column(
@@ -272,9 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           horizontal: 16, vertical: 11),
                       child: Row(
                         children: [
-                          const Text("🔍",
-                              style: TextStyle(
-                                  fontSize: 15, color: AppTheme.muted)),
+                          const Icon(Icons.search, color: AppTheme.muted, size: 18),
                           const SizedBox(width: 9),
                           Expanded(
                             child: GestureDetector(
@@ -285,27 +283,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                           ),
-                          /*
-                          GestureDetector(
-                            onTap: () => IAModal.show(context),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [AppTheme.green, Color(0xFF145C26)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: const Text(
-                                "🎲 Surprends-moi",
-                                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                          */
                         ],
                       ),
                     ),
@@ -314,8 +291,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   // --- Carousel ---
                   const HomeCarouselWidget(),
                   const SizedBox(height: 12),
-
-                  
 
                   // --- Explorer Section ---
                   Padding(
@@ -345,13 +320,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       physics: const BouncingScrollPhysics(),
                       children: [
-                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Tout"))), child: const CategoryIcon(label: "Tout", icon: "🍽️", isSelected: true)),
-                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Grillades"))), child: const CategoryIcon(label: "Grillades", icon: "🥩")),
-                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Poisson"))), child: const CategoryIcon(label: "Poisson", icon: "🐟")),
-                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Pasta"))), child: const CategoryIcon(label: "Pasta", icon: "🍝")),
-                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Pizza"))), child: const CategoryIcon(label: "Pizza", icon: "🍕")),
-                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Burger"))), child: const CategoryIcon(label: "Burger", icon: "🍔")),
-                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Boissons"))), child: const CategoryIcon(label: "Boissons", icon: "🧃")),
+                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Tout"))), child: const CategoryIcon(label: "Tout", iconData: Icons.restaurant_menu, isSelected: true)),
+                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Grillades"))), child: const CategoryIcon(label: "Grillades", iconData: Icons.outdoor_grill)),
+                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Poisson"))), child: const CategoryIcon(label: "Poisson", iconData: Icons.set_meal)),
+                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Pasta"))), child: const CategoryIcon(label: "Pasta", iconData: Icons.dinner_dining)),
+                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Pizza"))), child: const CategoryIcon(label: "Pizza", iconData: Icons.local_pizza)),
+                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Burger"))), child: const CategoryIcon(label: "Burger", iconData: Icons.lunch_dining)),
+                        JuicyWrapper(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Boissons"))), child: const CategoryIcon(label: "Boissons", iconData: Icons.local_drink)),
                       ].animate(interval: 50.ms).fade(duration: 300.ms).slideY(begin: 0.2, curve: Curves.easeOutQuad),
                     ),
                   ),
@@ -381,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text("Vous allez aimer 👌",
+                        Text("Vous allez aimer",
                             style: AppTheme.titleStyle.copyWith(fontSize: 18)),
                         JuicyWrapper(
                           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ExplorerScreen(category: "Tout"))),
