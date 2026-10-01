@@ -371,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
-                    height: 250,
+                    height: 195,
                     child: StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance.collection('products').limit(5).snapshots(),
                       builder: (context, snapshot) {
@@ -389,17 +389,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             final product = ProductModel.fromJson(data);
                             
                             return JuicyWrapper(
-                              onTap: product.isAvailable ? () => PersoModal.show(context, product: product, emoji: "🔥") : () {},
+                              onTap: product.isAvailable ? () => PersoModal.show(context, product: product, emoji: "") : () {},
                               child: DishCard(
                                 title: product.name,
                                 restaurant: product.restaurantName ?? product.restaurantId,
                                 price: product.priceHT * (1 + product.vatRate / 100),
-                                emoji: "🔥",
+                                emoji: "",
                                 badgeText: product.badgeText.isNotEmpty ? product.badgeText : "NOUVEAU",
                                 isAvailable: product.isAvailable,
                                 imageGradient: const [Color(0xFF080D14), Color(0xFF141E30)],
                                 imageUrl: product.image,
-                                onAdd: product.isAvailable ? () => PersoModal.show(context, product: product, emoji: "??") : null,
+                                onAdd: product.isAvailable ? () => PersoModal.show(context, product: product, emoji: "") : null,
                               ),
                             ).animate().fade(duration: 400.ms, delay: (doc.reference.id.hashCode % 5 * 100).ms).slideX(begin: 0.1, curve: Curves.easeOutQuad);
                           }).toList(),

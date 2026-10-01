@@ -77,7 +77,7 @@ class ExplorerScreen extends StatelessWidget {
               crossAxisCount: 2,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              childAspectRatio: 0.72,
+              childAspectRatio: 0.82,
             ),
             itemCount: docs.length,
             itemBuilder: (context, index) {

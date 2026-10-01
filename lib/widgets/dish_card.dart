@@ -52,7 +52,7 @@ class _DishCardState extends State<DishCard> {
   @override
   Widget build(BuildContext context) {
     Widget cardContent = Container(
-      width: 152,
+      width: 156,
       margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
         color: AppTheme.surface,
@@ -61,10 +61,11 @@ class _DishCardState extends State<DishCard> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Header Image
           Container(
-            height: 90,
+            height: 88,
             decoration: BoxDecoration(
               gradient: widget.imageGradient != null ? LinearGradient(
                 colors: widget.imageGradient!,
@@ -181,9 +182,10 @@ class _DishCardState extends State<DishCard> {
           ),
           // Body
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 if (widget.tonFavori)
                   RichText(
@@ -191,7 +193,6 @@ class _DishCardState extends State<DishCard> {
                        style: TextStyle(fontSize: 10, color: AppTheme.muted),
                        children: [
                          TextSpan(text: "Ton favori", style: TextStyle(color: AppTheme.greenXl, fontWeight: FontWeight.bold)),
-                         TextSpan(text: " ⭐"),
                        ]
                     )
                   )
@@ -218,19 +219,19 @@ class _DishCardState extends State<DishCard> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 6),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     widget.isAvailable
                     ? Text(
                         "${widget.price.toStringAsFixed(2).replaceAll('.', ',')} €",
-                        style: const TextStyle(fontFamily: 'Bricolage Grotesque', fontSize: 18, color: AppTheme.cream, fontWeight: FontWeight.w800),
+                        style: const TextStyle(fontFamily: 'Bricolage Grotesque', fontSize: 15, color: AppTheme.cream, fontWeight: FontWeight.w800),
                       )
                     : Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(color: AppTheme.surface3, borderRadius: BorderRadius.circular(4), border: Border.all(color: AppTheme.border)),
-                        child: const Text("🛑 Rupture", style: TextStyle(color: AppTheme.redL, fontSize: 11, fontWeight: FontWeight.w800)),
+                        child: const Text("Rupture", style: TextStyle(color: AppTheme.redL, fontSize: 10, fontWeight: FontWeight.w800)),
                       ),
                     GestureDetector(
                       onTap: () {
@@ -240,13 +241,13 @@ class _DishCardState extends State<DishCard> {
                         }
                       },
                       child: Container(
-                        width: 27,
-                        height: 27,
+                        width: 26,
+                        height: 26,
                         decoration: BoxDecoration(
                           color: widget.isAvailable ? AppTheme.green : AppTheme.surface3,
                           shape: BoxShape.circle,
                         ),
-                        child: Center(child: Text("+", style: TextStyle(color: widget.isAvailable ? Colors.white : AppTheme.muted, fontSize: 18, fontWeight: FontWeight.w300))),
+                        child: Center(child: Text("+", style: TextStyle(color: widget.isAvailable ? Colors.white : AppTheme.muted, fontSize: 16, fontWeight: FontWeight.w400))),
                       ),
                     ),
                   ],
