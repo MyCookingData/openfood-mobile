@@ -29,6 +29,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _validatedPhone = '';
   bool _isSendingOtp = false;
   bool _isSendingEmail = false;
+  int _cooldownSeconds = 0;
+  Timer? _cooldownTimer;
 
   String? _userDisplayName;
   String? _userFirstName;
@@ -42,8 +44,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     _phoneController.dispose();
     super.dispose();
+  }
+
+  void _startCooldown(int seconds) {
+    _cooldownTimer?.cancel();
+    setState(() => _cooldownSeconds = seconds);
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_cooldownSeconds > 1) {
+        setState(() => _cooldownSeconds--);
+      } else {
+        setState(() => _cooldownSeconds = 0);
+        timer.cancel();
+      }
+    });
+  }
+
+  String _formatCooldown(int totalSec) {
+    final m = totalSec ~/ 60;
+    final s = totalSec % 60;
+    return "${m}m ${s < 10 ? '0' : ''}$s";
   }
 
   Future<void> _loadUserProfile() async {
@@ -55,6 +81,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String? lName = prefs.getString('lastName');
     String? dName = prefs.getString('displayName');
     bool isPhoneVal = prefs.getBool('isPhoneValidated') ?? false;
+
+    // Cooldown persistant
+    final lastSent = prefs.getInt('last_otp_sent_ms') ?? 0;
+    final elapsed = (DateTime.now().millisecondsSinceEpoch - lastSent) ~/ 1000;
+    if (elapsed < 180) {
+      _startCooldown(180 - elapsed);
+    }
 
     // Si non présent dans SharedPreferences et utilisateur connecté, interroger Firestore
     if (user != null && (phone == null || phone.isEmpty || fName == null || fName.isEmpty)) {
@@ -111,10 +144,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
+    // 1. Interdiction stricte de re-tester un numéro déjà validé
+    if (_isPhoneValidated && _validatedPhone.isNotEmpty && formattedPhone == _validatedPhone) {
+      UiFeedback.showInfo(
+        context,
+        "Ce numéro de mobile est déjà validé sur votre compte.",
+      );
+      return;
+    }
+
+    // 2. Limitation à une tentative toutes les 3 minutes
+    if (_cooldownSeconds > 0) {
+      UiFeedback.showWarning(
+        context,
+        "Veuillez patienter encore ${_formatCooldown(_cooldownSeconds)} avant de demander un nouveau code pour ce numéro.",
+      );
+      return;
+    }
+
     setState(() => _isSendingOtp = true);
 
     try {
       await _authService.sendOTP(formattedPhone);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('last_otp_sent_ms', DateTime.now().millisecondsSinceEpoch);
+      _startCooldown(180);
+
       if (mounted) {
         setState(() => _isSendingOtp = false);
         _showOtpVerificationDialog(formattedPhone);
@@ -587,11 +642,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 style: TextStyle(color: AppTheme.muted, fontSize: 11.5),
                               ),
                               const SizedBox(height: 14),
-                              if (!_isPhoneValidated)
+                              if (!_isPhoneValidated) ...[
                                 ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.greenXl,
-                                    foregroundColor: Colors.black,
+                                    backgroundColor: _cooldownSeconds > 0 ? AppTheme.surface3 : AppTheme.greenXl,
+                                    foregroundColor: _cooldownSeconds > 0 ? AppTheme.muted : Colors.black,
                                     minimumSize:
                                         const Size(double.infinity, 48),
                                     shape: RoundedRectangleBorder(
@@ -607,46 +662,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             color: Colors.black,
                                           ),
                                         )
-                                      : const Icon(Icons.sms_rounded, size: 20),
+                                      : Icon(
+                                          _cooldownSeconds > 0 ? Icons.timer_outlined : Icons.sms_rounded,
+                                          size: 20,
+                                          color: _cooldownSeconds > 0 ? AppTheme.muted : Colors.black,
+                                        ),
                                   label: Text(
                                     _isSendingOtp
                                         ? "Envoi du SMS..."
-                                        : "Valider ce numéro par SMS",
+                                        : _cooldownSeconds > 0
+                                            ? "Demander un code (${_formatCooldown(_cooldownSeconds)})"
+                                            : "Valider ce numéro par SMS",
                                     style: const TextStyle(
                                         fontWeight: FontWeight.bold, fontSize: 14),
                                   ),
-                                  onPressed: _isSendingOtp ? null : _validatePhone,
-                                )
-                              else
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppTheme.cream,
-                                    side: const BorderSide(color: AppTheme.surface3),
-                                    minimumSize:
-                                        const Size(double.infinity, 42),
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(10)),
-                                  ),
-                                  icon: _isSendingOtp
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: AppTheme.greenXl,
-                                          ),
-                                        )
-                                      : const Icon(Icons.refresh_rounded, size: 18, color: AppTheme.greenXl),
-                                  label: Text(
-                                    _isSendingOtp
-                                        ? "Envoi du SMS..."
-                                        : "Re-valider / Tester ce numéro par SMS",
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600, fontSize: 13),
-                                  ),
-                                  onPressed: _isSendingOtp ? null : _validatePhone,
+                                  onPressed: (_isSendingOtp || _cooldownSeconds > 0) ? null : _validatePhone,
                                 ),
+                                if (_cooldownSeconds > 0) ...[
+                                  const SizedBox(height: 6),
+                                  Center(
+                                    child: Text(
+                                      "Un code a été demandé récemment. Prochain essai dans ${_formatCooldown(_cooldownSeconds)}.",
+                                      style: const TextStyle(color: AppTheme.muted2, fontSize: 11),
+                                    ),
+                                  ),
+                                ],
+                              ] else ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.green.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: AppTheme.green.withValues(alpha: 0.3)),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.green),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          "Ce numéro de téléphone est validé et associé à votre compte.",
+                                          style: TextStyle(color: AppTheme.cream, fontSize: 12, fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         )
@@ -896,7 +958,7 @@ class _OtpVerificationDialogState extends State<_OtpVerificationDialog> {
   final TextEditingController _otpController = TextEditingController();
   bool _isVerifying = false;
   bool _isResending = false;
-  int _resendCountdown = 60;
+  int _resendCountdown = 180;
   Timer? _timer;
   String? _errorMessage;
 
@@ -907,7 +969,7 @@ class _OtpVerificationDialogState extends State<_OtpVerificationDialog> {
   }
 
   void _startCountdown() {
-    _resendCountdown = 60;
+    _resendCountdown = 180;
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
@@ -917,6 +979,12 @@ class _OtpVerificationDialogState extends State<_OtpVerificationDialog> {
         timer.cancel();
       }
     });
+  }
+
+  String _formatTimer(int totalSec) {
+    final m = totalSec ~/ 60;
+    final s = totalSec % 60;
+    return "${m}m ${s < 10 ? '0' : ''}$s";
   }
 
   @override
@@ -964,6 +1032,9 @@ class _OtpVerificationDialogState extends State<_OtpVerificationDialog> {
 
     try {
       await widget.authService.sendOTP(widget.formattedPhone);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('last_otp_sent_ms', DateTime.now().millisecondsSinceEpoch);
+
       if (mounted) {
         setState(() => _isResending = false);
         _startCountdown();
@@ -1048,7 +1119,7 @@ class _OtpVerificationDialogState extends State<_OtpVerificationDialog> {
                   : const Icon(Icons.refresh_rounded, size: 16),
               label: Text(
                 _resendCountdown > 0
-                    ? "Renvoyer le code ($_resendCountdown s)"
+                    ? "Renvoyer le code (${_formatTimer(_resendCountdown)})"
                     : "Renvoyer un nouveau code SMS",
                 style: TextStyle(
                   color: _resendCountdown > 0 ? AppTheme.muted : AppTheme.greenXl,
