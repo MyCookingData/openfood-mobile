@@ -73,7 +73,7 @@ class _IAModalState extends State<IAModal> {
             PersoModal.show(
               context,
               product: product,
-              emoji: "🤖",
+              emoji: "",
             );
           }
         }

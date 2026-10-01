@@ -58,7 +58,7 @@ class ExplorerScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text("🍽️", style: TextStyle(fontSize: 40)),
+                  const Icon(Icons.restaurant, color: AppTheme.muted, size: 40),
                   const SizedBox(height: 16),
                   Text(
                     "Aucun plat trouvé !",
@@ -92,19 +92,19 @@ class ExplorerScreen extends StatelessWidget {
                   PersoModal.show(
                     context,
                     product: product,
-                    emoji: "🍔",
+                    emoji: "",
                   );
                 } : () {},
                 child: DishCard(
                   title: product.name,
                   restaurant: product.restaurantName ?? product.restaurantId,
                   price: priceTTC,
-                  emoji: "🍔",
+                  emoji: "",
                   badgeText: "NOUVEAU",
                   isAvailable: product.isAvailable,
                   imageGradient: const [Color(0xFF080D14), Color(0xFF141E30)],
                   imageUrl: product.image,
-                  onAdd: product.isAvailable ? () => PersoModal.show(context, product: product, emoji: "??") : null,
+                  onAdd: product.isAvailable ? () => PersoModal.show(context, product: product, emoji: "") : null,
                 ),
               ).animate().fade(duration: 400.ms, delay: (index * 50).ms).slideY(begin: 0.1, curve: Curves.easeOutQuad);
             },

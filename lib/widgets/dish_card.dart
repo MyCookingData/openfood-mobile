@@ -80,24 +80,44 @@ class _DishCardState extends State<DishCard> {
                   Positioned.fill(
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-                      child: CachedNetworkImage(
-                        imageUrl: widget.imageUrl!,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => const Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(color: AppTheme.greenXl, strokeWidth: 1.5),
-                          ),
-                        ),
-                        errorWidget: (context, url, error) => Center(
-                          child: Text(widget.emoji, style: const TextStyle(fontSize: 46)),
-                        ),
-                      ),
+                      child: widget.imageUrl!.startsWith('http')
+                          ? CachedNetworkImage(
+                              imageUrl: widget.imageUrl!,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
+                                color: AppTheme.surface3,
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(color: AppTheme.greenXl, strokeWidth: 1.5),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => Container(
+                                color: AppTheme.surface3,
+                                child: const Center(
+                                  child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 36),
+                                ),
+                              ),
+                            )
+                          : Image.asset(
+                              widget.imageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                color: AppTheme.surface3,
+                                child: const Center(
+                                  child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 36),
+                                ),
+                              ),
+                            ),
                     ),
                   )
                 else
-                  Center(child: Text(widget.emoji, style: const TextStyle(fontSize: 46))),
+                  Container(
+                    color: AppTheme.surface3,
+                    child: const Center(child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 36)),
+                  ),
                 if (widget.isSponsored)
                   Positioned(
                     top: 7,
@@ -111,7 +131,7 @@ class _DishCardState extends State<DishCard> {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text("★", style: TextStyle(color: AppTheme.gold, fontSize: 8)),
+                          Icon(Icons.star, color: AppTheme.gold, size: 10),
                           SizedBox(width: 3),
                           Text("Sponsorisé", style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w500)),
                         ],
@@ -147,7 +167,11 @@ class _DishCardState extends State<DishCard> {
                         shape: BoxShape.circle,
                       ),
                       child: Center(
-                        child: Text(_isFav ? "❤️" : "🤍", style: const TextStyle(fontSize: 13)),
+                        child: Icon(
+                          _isFav ? Icons.favorite : Icons.favorite_border,
+                          color: _isFav ? AppTheme.redL : Colors.white70,
+                          size: 14,
+                        ),
                       ),
                     ),
                   ),

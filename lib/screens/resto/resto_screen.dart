@@ -299,7 +299,7 @@ class _RestoScreenState extends State<RestoScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text("⭐ Bestsellers", style: AppTheme.titleStyle.copyWith(fontSize: 17)),
+                        Text("Bestsellers", style: AppTheme.titleStyle.copyWith(fontSize: 17)),
                         const Text("Les plus commandés", style: TextStyle(color: AppTheme.muted, fontSize: 12)),
                       ],
                     ),
@@ -316,22 +316,22 @@ class _RestoScreenState extends State<RestoScreen> {
                       children: bestsellers.map((doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         data['id'] = doc.id;
-                          final product = ProductModel.fromJson(data);
+                        final product = ProductModel.fromJson(data);
                         
                         return BestsellerCard(
                           title: data['name'] ?? 'Inconnu',
                           description: data['description'] ?? '',
                           price: product.priceHT * (1 + product.vatRate / 100),
-                          emoji: "🔥",
+                          imageUrl: product.image,
                           ordersCount: "${(10 + Random().nextInt(50))} commandes",
                           imageGradient: const [Color(0xFF071408), Color(0xFF1A4020)],
                           onTap: () {
                             HapticFeedback.lightImpact();
-                            PersoModal.show(context, product: product, emoji: "🔥");
+                            PersoModal.show(context, product: product, emoji: "");
                           },
                           onAdd: () {
                             HapticFeedback.lightImpact();
-                            PersoModal.show(context, product: product, emoji: "🔥");
+                            PersoModal.show(context, product: product, emoji: "");
                           },
                         );
                       }).toList(),
@@ -359,24 +359,23 @@ class _RestoScreenState extends State<RestoScreen> {
                       children: items.map((doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         data['id'] = doc.id;
-                          final product = ProductModel.fromJson(data);
-                        
+                        final product = ProductModel.fromJson(data);
                         
                         return ProductTile(
                           title: data['name'] ?? 'Inconnu',
                           description: data['description'] ?? '',
                           price: product.priceHT * (1 + product.vatRate / 100),
-                          emoji: "🍽️",
+                          emoji: "",
                           isAvailable: product.isAvailable,
                           imageGradient: const [Color(0xFF0A1A0D), Color(0xFF1A3A20)],
                           imageUrl: product.image,
                           onTap: product.isAvailable ? () {
                             HapticFeedback.lightImpact();
-                            PersoModal.show(context, product: product, emoji: "🍽️");
+                            PersoModal.show(context, product: product, emoji: "");
                           } : () {},
                           onAdd: product.isAvailable ? () {
                             HapticFeedback.lightImpact();
-                            PersoModal.show(context, product: product, emoji: "🍽️");
+                            PersoModal.show(context, product: product, emoji: "");
                           } : () {},
                         );
                       }).toList(),

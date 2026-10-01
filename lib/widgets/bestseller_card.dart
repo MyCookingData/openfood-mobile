@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../core/theme.dart';
 
 class BestsellerCard extends StatefulWidget {
@@ -6,6 +7,7 @@ class BestsellerCard extends StatefulWidget {
   final String description;
   final double price;
   final String emoji;
+  final String? imageUrl;
   final String ordersCount;
   final List<Color> imageGradient;
   final String? badgeText;
@@ -18,7 +20,8 @@ class BestsellerCard extends StatefulWidget {
     required this.title,
     required this.description,
     required this.price,
-    required this.emoji,
+    this.emoji = '',
+    this.imageUrl,
     required this.ordersCount,
     required this.imageGradient,
     this.badgeText,
@@ -53,16 +56,55 @@ class _BestsellerCardState extends State<BestsellerCard> {
             Container(
               height: 138,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: widget.imageGradient,
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                gradient: widget.imageUrl == null || widget.imageUrl!.isEmpty
+                    ? LinearGradient(
+                        colors: widget.imageGradient,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      )
+                    : null,
+                color: AppTheme.surface2,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
               ),
+              clipBehavior: Clip.antiAlias,
               child: Stack(
                 children: [
-                  Center(child: Text(widget.emoji, style: const TextStyle(fontSize: 62))),
+                  if (widget.imageUrl != null && widget.imageUrl!.isNotEmpty)
+                    Positioned.fill(
+                      child: widget.imageUrl!.startsWith('http')
+                          ? CachedNetworkImage(
+                              imageUrl: widget.imageUrl!,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
+                                color: AppTheme.surface3,
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(color: AppTheme.greenXl, strokeWidth: 2),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => Container(
+                                color: AppTheme.surface3,
+                                child: const Center(
+                                  child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 40),
+                                ),
+                              ),
+                            )
+                          : Image.asset(
+                              widget.imageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                color: AppTheme.surface3,
+                                child: const Center(
+                                  child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 40),
+                                ),
+                              ),
+                            ),
+                    )
+                  else
+                    const Center(child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 40)),
                   if (widget.badgeText != null)
                     Positioned(
                       top: 10,
@@ -110,7 +152,11 @@ class _BestsellerCardState extends State<BestsellerCard> {
                           shape: BoxShape.circle,
                         ),
                         child: Center(
-                          child: Text(_isFav ? "❤️" : "🤍", style: const TextStyle(fontSize: 14)),
+                          child: Icon(
+                            _isFav ? Icons.favorite : Icons.favorite_border,
+                            color: _isFav ? AppTheme.redL : Colors.white70,
+                            size: 16,
+                          ),
                         ),
                       ),
                     ),

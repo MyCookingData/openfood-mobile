@@ -61,24 +61,44 @@ class ProductTile extends StatelessWidget {
                     Positioned.fill(
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(14),
-                        child: CachedNetworkImage(
-                          imageUrl: imageUrl!,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => const Center(
-                            child: SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(color: AppTheme.greenXl, strokeWidth: 1.5),
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => Center(
-                            child: Text(emoji, style: const TextStyle(fontSize: 36)),
-                          ),
-                        ),
+                        child: imageUrl!.startsWith('http')
+                            ? CachedNetworkImage(
+                                imageUrl: imageUrl!,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: AppTheme.surface3,
+                                  child: const Center(
+                                    child: SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(color: AppTheme.greenXl, strokeWidth: 1.5),
+                                    ),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: AppTheme.surface3,
+                                  child: const Center(
+                                    child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 28),
+                                  ),
+                                ),
+                              )
+                            : Image.asset(
+                                imageUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  color: AppTheme.surface3,
+                                  child: const Center(
+                                    child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 28),
+                                  ),
+                                ),
+                              ),
                       ),
                     )
                   else
-                    Center(child: Text(emoji, style: const TextStyle(fontSize: 36))),
+                    Container(
+                      color: AppTheme.surface3,
+                      child: const Center(child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 28)),
+                    ),
                   if (stockWarn != null)
                     Positioned(
                       bottom: 4,
