@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'auth/login_screen.dart';
 import '../services/analytics_service.dart';
+import '../utils/ui_feedback.dart';
 import 'checkout_screen.dart';
 
 class CartScreen extends StatefulWidget {
@@ -238,11 +239,9 @@ class _CartScreenState extends State<CartScreen> {
                     try {
                       cart.incrementQuantity(item.id);
                     } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("⛔ Impossible d'ajouter plus de 20 articles pour une commande."),
-                          backgroundColor: AppTheme.redL,
-                        ),
+                      UiFeedback.showError(
+                        context,
+                        "Impossible d'ajouter plus de 20 articles pour une commande.",
                       );
                     }
                   },
@@ -353,11 +352,9 @@ class _CartScreenState extends State<CartScreen> {
                     context,
                     MaterialPageRoute(builder: (context) => const LoginScreen()),
                   );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Vous devez vous connecter ou créer un compte pour passer commande."),
-                      backgroundColor: AppTheme.surface3,
-                    ),
+                  UiFeedback.showInfo(
+                    context,
+                    "Vous devez vous connecter ou créer un compte pour passer commande.",
                   );
                 } else {
                   AnalyticsService.logCheckoutFunnel(
@@ -370,11 +367,9 @@ class _CartScreenState extends State<CartScreen> {
                   );
                 }
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("⛔ Votre panier est vide."),
-                    backgroundColor: AppTheme.redL,
-                  ),
+                UiFeedback.showWarning(
+                  context,
+                  "Votre panier est vide.",
                 );
               }
             },

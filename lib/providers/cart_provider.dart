@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:openfood_models/openfood_models.dart';
 import '../services/analytics_service.dart';
@@ -11,17 +12,38 @@ class CartProvider with ChangeNotifier {
   PromoCodeModel? _activePromotion;
 
   double _distanceKm = 4.5; // Simulate distance
-  bool _isClickAndCollect = false;
+  bool _isClickAndCollect = true; // Par défaut à emporter
   double? _freeDeliveryThreshold;
+  String? _restaurantName;
   
   double get distanceKm => _distanceKm;
+
+  String get restaurantName {
+    if (_restaurantName != null && _restaurantName!.trim().isNotEmpty) {
+      return _restaurantName!;
+    }
+    if (_items.isEmpty) return '';
+    final first = _items.values.first;
+    if (first.restaurantName != null && first.restaurantName!.trim().isNotEmpty) {
+      return first.restaurantName!;
+    }
+    return first.restaurantId.split(' · ').first;
+  }
 
   void updateLocation(AddressModel? address) {
     if (address != null) {
       updateRealDistance(address.latitude, address.longitude);
     }
   }
-  bool get isClickAndCollect => _isClickAndCollect;
+
+  bool get isClickAndCollect {
+    // Si aucun utilisateur n'est connecté, SEULE l'option À emporter est active
+    if (FirebaseAuth.instance.currentUser == null) {
+      return true;
+    }
+    return _isClickAndCollect;
+  }
+
   double? get freeDeliveryThreshold => _freeDeliveryThreshold;
 
   void setDistanceKm(double val) {
@@ -30,7 +52,12 @@ class CartProvider with ChangeNotifier {
   }
 
   void setClickAndCollect(bool val) {
-    _isClickAndCollect = val;
+    // Si l'utilisateur n'est pas connecté, forcer obligatoirement à true
+    if (FirebaseAuth.instance.currentUser == null) {
+      _isClickAndCollect = true;
+    } else {
+      _isClickAndCollect = val;
+    }
     notifyListeners();
   }
 
@@ -61,6 +88,9 @@ class CartProvider with ChangeNotifier {
       }
 
       if (data != null) {
+        if (data.containsKey('name') && data['name'] != null && data['name'].toString().isNotEmpty) {
+          _restaurantName = data['name'].toString();
+        }
         if (data.containsKey('lat') && data.containsKey('lng')) {
           double restoLat = (data['lat'] as num).toDouble();
           double restoLng = (data['lng'] as num).toDouble();
@@ -87,7 +117,7 @@ class CartProvider with ChangeNotifier {
   }
 
   double get deliveryFee {
-    if (_isClickAndCollect) return 0.0;
+    if (isClickAndCollect) return 0.0;
     if (_freeDeliveryThreshold != null && subtotalAmount >= _freeDeliveryThreshold!) return 0.0;
     if (_distanceKm > 14.0) return -1.0; // Indique UI error
     
@@ -259,6 +289,10 @@ class CartProvider with ChangeNotifier {
       if (currentRestoId != newRestoId) {
         throw Exception("DIFF_RESTAURANT"); // Rattrapé par l'UI pour proposer de vider
       }
+    }
+
+    if (newItem.restaurantName != null && newItem.restaurantName!.trim().isNotEmpty) {
+      _restaurantName = newItem.restaurantName;
     }
 
     if (_items.containsKey(newItem.id)) {

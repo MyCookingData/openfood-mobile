@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
+import '../../utils/ui_feedback.dart';
+import '../legal/legal_viewer_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -33,13 +35,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  int? get _currentCalculatedAge {
+    if (_selectedDateOfBirth == null) return null;
+    final now = DateTime.now();
+    int age = now.year - _selectedDateOfBirth!.year;
+    if (now.month < _selectedDateOfBirth!.month || (now.month == _selectedDateOfBirth!.month && now.day < _selectedDateOfBirth!.day)) {
+      age--;
+    }
+    return age;
+  }
+
   Future<void> _selectDate(BuildContext context) async {
+    final now = DateTime.now();
+    final defaultInitial = DateTime(now.year - 20, now.month, now.day);
+
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now()
-          .subtract(const Duration(days: 365 * 18)), // Default 18 years
+      initialDate: _selectedDateOfBirth ?? defaultInitial,
       firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
+      lastDate: now,
+      helpText: "VOTRE DATE DE NAISSANCE (18 ANS MINIMUM REQUIS)",
       builder: (context, child) {
         return Theme(
           data: ThemeData.dark().copyWith(
@@ -54,16 +69,62 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
       },
     );
-    if (picked != null && picked != _selectedDateOfBirth) {
+
+    if (picked != null) {
       setState(() {
         _selectedDateOfBirth = picked;
       });
+
+      int age = now.year - picked.year;
+      if (now.month < picked.month || (now.month == picked.month && now.day < picked.day)) {
+        age--;
+      }
+
+      if (age < 18) {
+        if (mounted) {
+          UiFeedback.showError(
+            context,
+            "Âge invalide ($age an${age > 1 ? 's' : ''}) : Vous devez avoir au moins 18 ans révolus pour vous inscrire sur OpenFood (CGU Art. 4.1).",
+            duration: const Duration(seconds: 7),
+          );
+        }
+      } else {
+        if (mounted) {
+          UiFeedback.showSuccess(
+            context,
+            "Âge validé : $age ans (Majeur).",
+            duration: const Duration(seconds: 3),
+          );
+        }
+      }
     }
   }
 
   Future<void> _signUp() async {
-    // Vérification via FormState
+    // 1. Vérification de la date de naissance
+    if (_selectedDateOfBirth == null) {
+      UiFeedback.showError(
+        context,
+        "Veuillez sélectionner votre date de naissance.",
+      );
+      return;
+    }
+
+    final age = _currentCalculatedAge ?? 0;
+    if (age < 18) {
+      UiFeedback.showError(
+        context,
+        "Âge invalide ($age an${age > 1 ? 's' : ''}) : Vous devez être majeur (au moins 18 ans révolus) pour créer un compte sur OpenFood.",
+      );
+      return;
+    }
+
+    // 2. Validation des champs du formulaire
     if (!_formKey.currentState!.validate()) {
+      UiFeedback.showWarning(
+        context,
+        "Veuillez renseigner tous les champs obligatoires du formulaire.",
+      );
       return;
     }
 
@@ -73,15 +134,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final lastName = _lastNameCtrl.text.trim();
     final phone = _phoneCtrl.text.trim();
 
-    if (_selectedDateOfBirth == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text("Veuillez sélectionner votre date de naissance.",
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              backgroundColor: AppTheme.redL),
-        );
-      }
+    // 3. Validation de sécurité du mot de passe
+    final pwdError = AuthService.validatePasswordStrength(pwd);
+    if (pwdError != null) {
+      UiFeedback.showError(
+        context,
+        pwdError,
+      );
       return;
     }
 
@@ -99,29 +158,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       if (user != null && mounted) {
+        UiFeedback.showSuccess(
+          context,
+          "Compte créé avec succès ! Un e-mail de confirmation vous a été envoyé.",
+        );
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        String errorMsg = "Erreur de création de compte.";
-        final errorStr = e.toString().toLowerCase();
-
-        if (errorStr.contains('email-already-in-use')) {
-          errorMsg = "Cette adresse email est déjà utilisée.";
-        } else if (errorStr.contains('weak-password')) {
-          errorMsg = "Le mot de passe utilisé est trop faible.";
-        } else if (errorStr.contains('invalid-email')) {
-          errorMsg = "L'adresse email est invalide.";
-        } else {
-          errorMsg = e.toString();
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text("⛔ $errorMsg",
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              backgroundColor: AppTheme.redL),
-        );
+        UiFeedback.showError(context, e.toString());
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -149,6 +194,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 10),
+                Center(
+                  child: Image.asset(
+                    'assets/logo_long.png',
+                    height: 48,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                  ),
+                ),
+                const SizedBox(height: 24),
                 const Text(
                   "Créer un compte",
                   style: TextStyle(
@@ -207,36 +261,72 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 20),
 
                 // Date de naissance
-                _buildInputLabel("Date de naissance"),
+                _buildInputLabel("Date de naissance (18 ans minimum)"),
                 const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: () => _selectDate(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 16, horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppTheme.border),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.cake_outlined,
-                            color: AppTheme.muted, size: 20),
-                        const SizedBox(width: 12),
-                        Text(
-                          _selectedDateOfBirth == null
-                              ? "Sélectionner une date"
-                              : "${_selectedDateOfBirth!.day.toString().padLeft(2, '0')}/${_selectedDateOfBirth!.month.toString().padLeft(2, '0')}/${_selectedDateOfBirth!.year}",
-                          style: TextStyle(
-                              color: _selectedDateOfBirth == null
-                                  ? AppTheme.muted
-                                  : AppTheme.cream,
-                              fontSize: 16),
+                Builder(
+                  builder: (context) {
+                    final isSet = _selectedDateOfBirth != null;
+                    final isMinor = isSet && (_currentCalculatedAge ?? 0) < 18;
+                    final isAdult = isSet && (_currentCalculatedAge ?? 0) >= 18;
+
+                    return GestureDetector(
+                      onTap: () => _selectDate(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 16, horizontal: 20),
+                        decoration: BoxDecoration(
+                          color: isMinor
+                              ? const Color(0xFFC62828).withOpacity(0.12)
+                              : isAdult
+                                  ? const Color(0xFF1B5E20).withOpacity(0.12)
+                                  : AppTheme.surface,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isMinor
+                                ? const Color(0xFFFF8A80)
+                                : isAdult
+                                    ? AppTheme.greenXl
+                                    : AppTheme.border,
+                            width: isSet ? 1.5 : 1.0,
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isMinor
+                                  ? Icons.error_outline_rounded
+                                  : isAdult
+                                      ? Icons.check_circle_outline_rounded
+                                      : Icons.cake_outlined,
+                              color: isMinor
+                                  ? const Color(0xFFFF8A80)
+                                  : isAdult
+                                      ? AppTheme.greenXl
+                                      : AppTheme.muted,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                !isSet
+                                    ? "Sélectionner une date"
+                                    : "${_selectedDateOfBirth!.day.toString().padLeft(2, '0')}/${_selectedDateOfBirth!.month.toString().padLeft(2, '0')}/${_selectedDateOfBirth!.year} (${_currentCalculatedAge} ans ${isMinor ? '- Mineur' : '- Majeur'})",
+                                style: TextStyle(
+                                  color: isMinor
+                                      ? const Color(0xFFFF8A80)
+                                      : isAdult
+                                          ? Colors.white
+                                          : AppTheme.muted,
+                                  fontWeight: isSet ? FontWeight.bold : FontWeight.normal,
+                                  fontSize: 14.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 20),
@@ -295,7 +385,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   obscureText: _obscurePassword,
                   style: const TextStyle(color: AppTheme.cream),
                   decoration: _buildInputDecoration(
-                    hint: "Min. 6 caractères",
+                    hint: "8+ car. (1 Maj, 1 Min, 1 Chiffre, 1 Symbole)",
                     icon: Icons.lock_outline,
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -315,8 +405,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value == null || value.trim().isEmpty) {
                       return "Le mot de passe est requis";
                     }
-                    if (value.length < 6) {
-                      return "Doit faire au moins 6 caractères";
+                    if (value.length < 8) {
+                      return "Au moins 8 caractères requis";
+                    }
+                    if (!RegExp(r'[A-Z]').hasMatch(value)) {
+                      return "Au moins 1 majuscule (A-Z) requise";
+                    }
+                    if (!RegExp(r'[a-z]').hasMatch(value)) {
+                      return "Au moins 1 minuscule (a-z) requise";
+                    }
+                    if (!RegExp(r'[0-9]').hasMatch(value)) {
+                      return "Au moins 1 chiffre (0-9) requis";
+                    }
+                    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>\_\-+=\[\]/\\]').hasMatch(value)) {
+                      return "Au moins 1 caractère spécial (@, #, !, %, &...) requis";
                     }
                     return null;
                   },
@@ -359,6 +461,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700),
                             ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Mention légale N2D
+                Center(
+                  child: GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LegalViewerScreen()),
+                    ),
+                    child: const Text(
+                      "En créant un compte, vous acceptez les Conditions Générales (CGU / CGV) & la Politique de Remboursement de N2D NEW DELIVERY DRIVER.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 11,
+                        height: 1.4,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
                   ),
                 ),
@@ -412,8 +536,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       filled: true,
       fillColor: AppTheme.surface,
       contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      errorStyle:
-          const TextStyle(color: AppTheme.redL, fontWeight: FontWeight.w600),
+      errorStyle: const TextStyle(color: Color(0xFFFF5252), fontSize: 12.5, fontWeight: FontWeight.w600, height: 1.3),
+      errorMaxLines: 3,
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: AppTheme.border),

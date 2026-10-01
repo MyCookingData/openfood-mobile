@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
+import '../../utils/ui_feedback.dart';
 import 'register_screen.dart';
+import '../legal/legal_viewer_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -66,12 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
           errorMsg = e.toString();
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text("⛔ $errorMsg",
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              backgroundColor: AppTheme.redL),
-        );
+        UiFeedback.showError(context, errorMsg);
         setState(() => _isLoading = false);
       }
     }
@@ -80,11 +77,9 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _forgotPassword() async {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Veuillez saisir votre adresse e-mail dans le champ ci-dessus pour réinitialiser votre mot de passe."),
-          backgroundColor: AppTheme.redL,
-        ),
+      UiFeedback.showError(
+        context,
+        "Veuillez saisir votre adresse e-mail dans le champ ci-dessus pour réinitialiser votre mot de passe.",
       );
       return;
     }
@@ -92,11 +87,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final regex = RegExp(
         r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9-]+\.[a-zA-Z]+");
     if (!regex.hasMatch(email)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Veuillez saisir une adresse e-mail valide."),
-          backgroundColor: AppTheme.redL,
-        ),
+      UiFeedback.showError(
+        context,
+        "Veuillez saisir une adresse e-mail valide.",
       );
       return;
     }
@@ -105,25 +98,14 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await _authService.sendPasswordResetEmail(email);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("E-mail de réinitialisation envoyé ! Vérifiez votre boîte de réception."),
-            backgroundColor: AppTheme.greenXl,
-          ),
+        UiFeedback.showSuccess(
+          context,
+          "E-mail de réinitialisation envoyé ! Vérifiez votre boîte de réception.",
         );
       }
     } catch (e) {
       if (mounted) {
-        String errorMsg = e.toString();
-        if (errorMsg.startsWith("Exception: ")) {
-          errorMsg = errorMsg.substring(11);
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("⛔ $errorMsg"),
-            backgroundColor: AppTheme.redL,
-          ),
-        );
+        UiFeedback.showError(context, e.toString());
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -147,21 +129,20 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Logo officiel
                 Center(
                   child: Image.asset(
-                    'assets/logo_splash.jpg',
-                    width: 200,
-                    height: 200,
+                    'assets/logo_long.png',
+                    height: 54,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) => Container(
-                      width: 100,
-                      height: 100,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
-                          shape: BoxShape.circle),
-                      child: const Center(
-                          child: Text("Logo",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: Colors.white, fontSize: 12))),
+                        color: AppTheme.surface3,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text("OpenFood",
+                          style: TextStyle(
+                              color: AppTheme.cream,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20)),
                     ),
                   ),
                 ),
@@ -318,6 +299,28 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 28),
+
+                // Mention légale N2D
+                Center(
+                  child: GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LegalViewerScreen()),
+                    ),
+                    child: const Text(
+                      "En continuant, vous acceptez les Conditions Générales (CGU / CGV) & la Politique de Remboursement de N2D NEW DELIVERY DRIVER.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 11,
+                        height: 1.4,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -348,8 +351,8 @@ class _LoginScreenState extends State<LoginScreen> {
       filled: true,
       fillColor: AppTheme.surface,
       contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      errorStyle:
-          const TextStyle(color: AppTheme.redL, fontWeight: FontWeight.w600),
+      errorStyle: const TextStyle(color: Color(0xFFFF5252), fontSize: 12.5, fontWeight: FontWeight.w600, height: 1.3),
+      errorMaxLines: 3,
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: AppTheme.border),

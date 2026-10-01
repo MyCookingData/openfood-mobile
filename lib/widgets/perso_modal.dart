@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../core/theme.dart';
 import 'package:openfood_models/openfood_models.dart';
 import 'upsell_modal.dart';
@@ -142,6 +142,7 @@ class _PersoModalState extends State<PersoModal> {
         category: widget.product.category,
         restaurantId: widget.product.restaurantId,
         restaurantName: widget.product.restaurantName,
+        image: widget.product.image,
         selectedOptions: resOptions.isEmpty ? null : resOptions,
       ),
       onSuccess: () {
@@ -183,22 +184,64 @@ class _PersoModalState extends State<PersoModal> {
               controller: _scrollController,
               padding: const EdgeInsets.only(bottom: 40),
               children: [
-                // Hero header
+                // Hero Header Photo du Plat
                 Container(
                   width: double.infinity,
-                  height: 150,
-                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  height: 180,
+                  margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   decoration: BoxDecoration(
-                    gradient: widget.gradient != null ? LinearGradient(
-                      colors: widget.gradient!,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ) : null,
-                    color: widget.gradient == null ? AppTheme.surface2 : null,
+                    color: AppTheme.surface2,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppTheme.border),
                   ),
-                  child: Center(
-                    child: Text(widget.emoji, style: const TextStyle(fontSize: 76)),
-                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: widget.product.image.isNotEmpty
+                      ? (widget.product.image.startsWith('http')
+                          ? CachedNetworkImage(
+                              imageUrl: widget.product.image,
+                              width: double.infinity,
+                              height: 180,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
+                                color: AppTheme.surface3,
+                                child: const Center(
+                                  child: CircularProgressIndicator(color: AppTheme.green, strokeWidth: 2),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => Container(
+                                color: AppTheme.surface3,
+                                child: const Center(
+                                  child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 54),
+                                ),
+                              ),
+                            )
+                          : Image.asset(
+                              widget.product.image,
+                              width: double.infinity,
+                              height: 180,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                color: AppTheme.surface3,
+                                child: const Center(
+                                  child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 54),
+                                ),
+                              ),
+                            ))
+                      : Container(
+                          decoration: BoxDecoration(
+                            gradient: widget.gradient != null
+                                ? LinearGradient(
+                                    colors: widget.gradient!,
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  )
+                                : null,
+                            color: widget.gradient == null ? AppTheme.surface2 : null,
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 54),
+                          ),
+                        ),
                 ),
                 
                 Padding(

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme.dart';
@@ -10,6 +10,7 @@ import '../../../services/order_service.dart';
 import '../../../widgets/order_card.dart';
 import '../../../services/auth_service.dart';
 import '../../../utils/maps_launcher.dart';
+import '../../../utils/ui_feedback.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -61,7 +62,7 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
 
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Les services de localisation sont désactivés.')));
+      if (mounted) UiFeedback.showError(context, 'Les services de localisation sont désactivés.');
       return;
     }
 
@@ -69,13 +70,13 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Permission de localisation refusée.')));
+        if (mounted) UiFeedback.showError(context, 'Permission de localisation refusée.');
         return;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Permission de localisation refusée de façon permanente.')));
+      if (mounted) UiFeedback.showError(context, 'Permission de localisation refusée de façon permanente.');
       return;
     }
 
@@ -97,7 +98,7 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
           _isOnline = true;
         });
       } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impossible d\'obtenir la position GPS.')));
+        if (mounted) UiFeedback.showError(context, 'Impossible d\'obtenir la position GPS.');
       }
     }
   }
@@ -121,11 +122,11 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
     if (availableOrders.length > _lastAvailableCount) {
       //_audioPlayer.play(AssetSource('sounds/notification.mp3'));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text("🔔 Nouvelle commande disponible à proximité !"),
-          backgroundColor: AppTheme.greenXl,
+        UiFeedback.showSuccess(
+          context,
+          "Nouvelle commande disponible à proximité !",
           duration: const Duration(seconds: 3),
-        ));
+        );
       }
     }
     _lastAvailableCount = availableOrders.length;
@@ -136,11 +137,11 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
       _lastActiveOrderId = activeOrder.id;
       //_audioPlayer.play(AssetSource('sounds/notification.mp3'));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("🚨 Une commande vous a été assignée !"),
-          backgroundColor: Color(0xFFA855F7),
-          duration: Duration(seconds: 5),
-        ));
+        UiFeedback.showInfo(
+          context,
+          "Une commande vous a été assignée !",
+          duration: const Duration(seconds: 5),
+        );
       }
     } else if (activeOrder == null) {
       _lastActiveOrderId = null;
@@ -171,7 +172,7 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
         }
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Coordonnées du restaurant introuvables.")));
+        UiFeedback.showError(context, "Coordonnées du restaurant introuvables.");
       }
     } catch (e) {
       debugPrint("Err Nav: $e");
@@ -182,7 +183,7 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
     if (order.customerLat != null && order.customerLng != null) {
       MapsLauncher.openMaps(lat: order.customerLat!, lng: order.customerLng!);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Le client n'a pas fourni de position GPS exacte.")));
+      UiFeedback.showWarning(context, "Le client n'a pas fourni de position GPS exacte.");
     }
   }
 
@@ -485,7 +486,7 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
                    Container(
                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                      decoration: BoxDecoration(color: const Color(0xFFA855F7).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(99)),
-                     child: const Text("🚨 COURSE EN COURS 🚨", style: TextStyle(color: Color(0xFFD8B4FE), fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 12)),
+                     child: const Text("COURSE EN COURS", style: TextStyle(color: Color(0xFFD8B4FE), fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 12)),
                    ).animate().shimmer(duration: 1500.ms, color: Colors.white),
                    const SizedBox(height: 28),
                    

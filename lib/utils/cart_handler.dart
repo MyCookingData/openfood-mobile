@@ -1,29 +1,26 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/cart_provider.dart';
 import 'package:openfood_models/openfood_models.dart';
 import '../core/theme.dart';
+import 'ui_feedback.dart';
 
 class CartHandler {
   static void addItem(BuildContext context, CartItem item, {VoidCallback? onSuccess}) {
     final cart = Provider.of<CartProvider>(context, listen: false);
     try {
       cart.addItem(item);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("${item.name} ajouté !", style: const TextStyle(color: Colors.white)),
-          backgroundColor: AppTheme.greenXl,
-          duration: const Duration(seconds: 1),
-        ),
+      UiFeedback.showSuccess(
+        context,
+        "${item.name} ajouté au panier !",
+        duration: const Duration(seconds: 2),
       );
       if (onSuccess != null) onSuccess();
     } catch (e) {
       if (e.toString().contains("DIFF_RESTAURANT")) {
         _showConflictDialog(context, cart, item, onSuccess);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.red),
-        );
+        UiFeedback.showError(context, e.toString());
       }
     }
   }
@@ -44,7 +41,7 @@ class CartHandler {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  "⚠️ Oops, une erreur de restaurant !",
+                  "Attention",
                   style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
@@ -68,8 +65,10 @@ class CartHandler {
                     Navigator.pop(ctx);
                     cart.clearCart();
                     cart.addItem(newItem);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("${newItem.name} ajouté !"), backgroundColor: AppTheme.greenXl, duration: const Duration(seconds: 1)),
+                    UiFeedback.showSuccess(
+                      context,
+                      "${newItem.name} ajouté au panier !",
+                      duration: const Duration(seconds: 2),
                     );
                     if (onSuccess != null) onSuccess();
                   },

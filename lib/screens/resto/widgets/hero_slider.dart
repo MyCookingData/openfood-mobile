@@ -2,7 +2,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 class HeroSlider extends StatefulWidget {
-  const HeroSlider({super.key});
+  final String restaurantName;
+  final String? zone;
+  final String? imageUrl;
+
+  const HeroSlider({
+    super.key,
+    this.restaurantName = 'Open Food',
+    this.zone,
+    this.imageUrl,
+  });
 
   @override
   State<HeroSlider> createState() => _HeroSliderState();
@@ -49,25 +58,48 @@ class _HeroSliderState extends State<HeroSlider> {
           controller: _pageController,
           onPageChanged: (idx) => setState(() => _currentPage = idx),
           children: [
-            // Slide 1
+            // Slide 1 - Nom du restaurant
             _buildSlide(
               gradient: const [Color(0xFF071408), Color(0xFF0F2A16), Color(0xFF1A5030)],
-              child: const Stack(
+              child: Stack(
                 fit: StackFit.expand,
                 children: [
                   Positioned(
-                    bottom: 38,
+                    bottom: 28,
                     left: 20,
-                    child: Text(
-                      "Open Food",
-                      style: TextStyle(
-                        fontFamily: 'Bricolage Grotesque',
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
-                        shadows: [Shadow(color: Colors.black54, blurRadius: 12, offset: Offset(0, 2))],
-                      ),
+                    right: 20,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          widget.restaurantName,
+                          style: const TextStyle(
+                            fontFamily: 'Bricolage Grotesque',
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
+                            shadows: [Shadow(color: Colors.black87, blurRadius: 12, offset: Offset(0, 2))],
+                          ),
+                        ),
+                        if (widget.zone != null && widget.zone!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Text("📍 ", style: TextStyle(fontSize: 12)),
+                              Text(
+                                widget.zone!,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ],
@@ -96,10 +128,6 @@ class _HeroSliderState extends State<HeroSlider> {
                     bottom: 30, right: 16,
                     child: Text("🍱", style: TextStyle(fontSize: 56, shadows: [Shadow(color: Colors.black45, blurRadius: 14, offset: Offset(0, 6))])),
                   ),
-                  Positioned(
-                    top: 14, right: 58,
-                    child: _buildPlanBadge("PRO"),
-                  ),
                 ],
               ),
             ),
@@ -125,10 +153,6 @@ class _HeroSliderState extends State<HeroSlider> {
                   const Positioned(
                     bottom: 30, right: 16,
                     child: Text("🍝", style: TextStyle(fontSize: 56, shadows: [Shadow(color: Colors.black45, blurRadius: 14, offset: Offset(0, 6))])),
-                  ),
-                  Positioned(
-                    top: 14, right: 58,
-                    child: _buildPlanBadge("ÉLITE"),
                   ),
                 ],
               ),

@@ -27,7 +27,7 @@ class RestoScreen extends StatefulWidget {
 class _RestoScreenState extends State<RestoScreen> {
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
-  int _activeCategory = 0;
+  final ValueNotifier<int> _activeCategoryNotifier = ValueNotifier<int>(0);
   final List<int> _categoryListIndices = [];
   List<String> _navCategories = [];
   late Future<QuerySnapshot> _restaurantFuture;
@@ -46,6 +46,7 @@ class _RestoScreenState extends State<RestoScreen> {
   @override
   void dispose() {
     _itemPositionsListener.itemPositions.removeListener(_onPositionsChanged);
+    _activeCategoryNotifier.dispose();
     super.dispose();
   }
 
@@ -70,19 +71,19 @@ class _RestoScreenState extends State<RestoScreen> {
       }
     }
 
-    if (_activeCategory != activeCat) {
-      if (mounted) setState(() => _activeCategory = activeCat);
+    if (_activeCategoryNotifier.value != activeCat) {
+      _activeCategoryNotifier.value = activeCat;
     }
   }
 
   void _scrollToCategory(int index) {
     HapticFeedback.lightImpact();
-    setState(() => _activeCategory = index);
+    _activeCategoryNotifier.value = index;
     if (_categoryListIndices.isNotEmpty && index < _categoryListIndices.length) {
       if (_itemScrollController.isAttached) {
         _itemScrollController.scrollTo(
           index: _categoryListIndices[index],
-          duration: const Duration(milliseconds: 500),
+          duration: const Duration(milliseconds: 350),
           curve: Curves.easeInOut,
         );
       }
@@ -181,29 +182,34 @@ class _RestoScreenState extends State<RestoScreen> {
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: AppTheme.border)),
         ),
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          itemCount: _navCategories.length,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          itemBuilder: (context, index) {
-            bool isSel = _activeCategory == index;
-            return GestureDetector(
-              onTap: () => _scrollToCategory(index),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  border: isSel ? const Border(bottom: BorderSide(color: AppTheme.greenXl, width: 2)) : null,
-                ),
-                child: Text(
-                  _navCategories[index],
-                  style: TextStyle(
-                    color: isSel ? AppTheme.greenXl : AppTheme.muted,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+        child: ValueListenableBuilder<int>(
+          valueListenable: _activeCategoryNotifier,
+          builder: (context, activeCat, _) {
+            return ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _navCategories.length,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemBuilder: (context, index) {
+                bool isSel = activeCat == index;
+                return GestureDetector(
+                  onTap: () => _scrollToCategory(index),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      border: isSel ? const Border(bottom: BorderSide(color: AppTheme.greenXl, width: 2)) : null,
+                    ),
+                    child: Text(
+                      _navCategories[index],
+                      style: TextStyle(
+                        color: isSel ? AppTheme.greenXl : AppTheme.muted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             );
           },
         ),
@@ -230,8 +236,14 @@ class _RestoScreenState extends State<RestoScreen> {
               }
 
               String restaurantId = widget.restaurantName;
+              String restoZone = "";
+              String restoImage = "";
               if (restoSnap.hasData && restoSnap.data!.docs.isNotEmpty) {
-                restaurantId = restoSnap.data!.docs.first.id;
+                final doc = restoSnap.data!.docs.first;
+                restaurantId = doc.id;
+                final rd = doc.data() as Map<String, dynamic>;
+                restoZone = rd['zone'] ?? "";
+                restoImage = rd['image'] ?? "";
               }
 
               return StreamBuilder<QuerySnapshot>(
@@ -388,7 +400,11 @@ class _RestoScreenState extends State<RestoScreen> {
                           ),
                           builder: (context, carouselSnap) {
                             if (!carouselSnap.hasData || carouselSnap.data!.isEmpty) {
-                              return const HeroSlider();
+                              return HeroSlider(
+                                restaurantName: widget.restaurantName,
+                                zone: restoZone,
+                                imageUrl: restoImage,
+                              );
                             }
                             return PageView(
                               controller: PageController(viewportFraction: 0.95),
@@ -414,8 +430,8 @@ class _RestoScreenState extends State<RestoScreen> {
                         )
                       ),
                       Positioned(
-                        top: 40,
-                        left: 10,
+                        top: MediaQuery.of(context).padding.top + 4,
+                        left: 8,
                         child: GestureDetector(
                           onTap: () => Navigator.pop(context),
                           child: Container(

@@ -5,6 +5,7 @@ import 'package:geocoding/geocoding.dart';
 import 'package:provider/provider.dart';
 import '../providers/location_provider.dart';
 import '../core/theme.dart';
+import '../utils/ui_feedback.dart';
 
 class AddressPickerScreen extends StatefulWidget {
   const AddressPickerScreen({super.key});
@@ -92,8 +93,9 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Adresse introuvable, essayez d'être plus précis."), backgroundColor: AppTheme.redL),
+        UiFeedback.showError(
+          context,
+          "Adresse introuvable, essayez d'être plus précis.",
         );
       }
     } finally {
@@ -128,7 +130,10 @@ class _AddressPickerScreenState extends State<AddressPickerScreen> {
               loc.addAddress(label: label, addressName: _currentAddress, lat: _center.latitude, lng: _center.longitude);
               Navigator.pop(ctx);
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$label ajouté: $_currentAddress", style: const TextStyle(color: Colors.white)), backgroundColor: AppTheme.greenXl));
+              UiFeedback.showSuccess(
+                context,
+                "$label ajouté : $_currentAddress",
+              );
             },
             child: const Text("Enregistrer", style: TextStyle(color: Colors.white)),
           )

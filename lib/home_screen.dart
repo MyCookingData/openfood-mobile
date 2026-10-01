@@ -90,12 +90,101 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   // --- Custom Header ---
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 30, 20, 14),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                    child: Column(
                       children: [
-                        // Location
+                        // Top row: Brand Logo + Action Icons (Cart & Profile)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Image.asset(
+                              'assets/logo_openfood.png',
+                              height: 36,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) => Image.asset(
+                                'assets/logo_long.jpg',
+                                height: 36,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                // ICÔNE BAG / PANIER
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()));
+                                  },
+                                  child: Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: AppTheme.surface,
+                                      border: Border.all(color: AppTheme.border2),
+                                    ),
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        const Icon(Icons.shopping_bag_outlined, color: AppTheme.cream, size: 20),
+                                        Consumer<CartProvider>(
+                                          builder: (context, cart, child) {
+                                            if (cart.totalQuantity == 0) return const SizedBox.shrink();
+                                            return Positioned(
+                                              top: -4,
+                                              right: -4,
+                                              child: Container(
+                                                padding: const EdgeInsets.all(4),
+                                                decoration: const BoxDecoration(
+                                                  color: AppTheme.greenXl,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: Text(
+                                                  "${cart.totalQuantity}",
+                                                  style: const TextStyle(
+                                                    color: AppTheme.bg,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w900,
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+                                  },
+                                  child: Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        colors: [AppTheme.green, Color(0xFF145C26)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(initialLetter,
+                                          style: AppTheme.titleStyle.copyWith(
+                                              fontSize: 16, color: Colors.white)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // Location bar
                         GestureDetector(
                           onTap: () {
                             AddressSelectorModal.show(context);
@@ -104,132 +193,66 @@ class _HomeScreenState extends State<HomeScreen> {
                             builder: (context, loc, child) {
                               if (loc.selectedAddress == null) {
                                 return Container(
-                                  constraints: const BoxConstraints(maxWidth: 150),
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(color: AppTheme.redL.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.redL.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppTheme.redL.withValues(alpha: 0.3)),
+                                  ),
                                   child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.warning_amber_rounded, color: AppTheme.redL, size: 16),
-                                      SizedBox(width: 6),
-                                      Flexible(
-                                        child: Text("Saisir l'adresse", style: TextStyle(color: AppTheme.redL, fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      Icon(Icons.warning_amber_rounded, color: AppTheme.redL, size: 18),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          "Sélectionner une adresse de livraison",
+                                          style: TextStyle(color: AppTheme.redL, fontSize: 13, fontWeight: FontWeight.bold),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
+                                      Icon(Icons.chevron_right, color: AppTheme.redL, size: 18),
                                     ],
                                   ),
                                 );
                               }
 
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text("LIVRAISON À", style: TextStyle(color: AppTheme.muted, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.8)),
-                                  const SizedBox(height: 1),
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      const Text("📍", style: TextStyle(color: AppTheme.redL, fontSize: 13)),
-                                      const SizedBox(width: 4),
-                                      Container(
-                                        constraints: const BoxConstraints(maxWidth: 160),
-                                        child: Text(
-                                          loc.selectedAddress!.label, 
-                                          style: const TextStyle(color: AppTheme.cream, fontSize: 15, fontWeight: FontWeight.bold),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      const Icon(Icons.arrow_drop_down, color: AppTheme.greenL, size: 16),
-                                    ],
-                                  ),
-                                ],
-                              );
-                            }
-                          ),
-                        ),
-                        // Logo long
-                        Image.asset(
-                          'assets/logo_long.jpg',
-                          height: 70,
-                          width: 180,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => const Text(
-                              "Logo", style: TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold)),
-                        ),
-                        // Actions (Seeder, Bell, Profile)
-                        Row(
-                          children: [
-                            // ICÔNE BAG / PANIER
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen()));
-                              },
-                              child: Container(
-                                width: 36,
-                                height: 36,
+                              return Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                 decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
                                   color: AppTheme.surface,
+                                  borderRadius: BorderRadius.circular(12),
                                   border: Border.all(color: AppTheme.border2),
                                 ),
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  clipBehavior: Clip.none,
+                                child: Row(
                                   children: [
-                                    const Icon(Icons.shopping_bag_outlined, color: AppTheme.cream, size: 18),
-                                    Consumer<CartProvider>(
-                                      builder: (context, cart, child) {
-                                        if (cart.totalQuantity == 0) return const SizedBox.shrink();
-                                        return Positioned(
-                                          top: -4,
-                                          right: -4,
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: const BoxDecoration(
-                                              color: AppTheme.greenXl,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Text(
-                                              "${cart.totalQuantity}",
-                                              style: const TextStyle(
-                                                color: AppTheme.bg,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w900,
-                                              ),
-                                            ),
+                                    const Text("📍", style: TextStyle(fontSize: 15)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            "LIVRAISON À",
+                                            style: TextStyle(color: AppTheme.muted, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.8),
                                           ),
-                                        );
-                                      },
+                                          Text(
+                                            loc.selectedAddress!.label,
+                                            style: const TextStyle(color: AppTheme.cream, fontSize: 13, fontWeight: FontWeight.bold),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
                                     ),
+                                    const Icon(Icons.arrow_drop_down, color: AppTheme.greenL, size: 20),
                                   ],
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
-                              },
-                              child: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: LinearGradient(
-                                    colors: [AppTheme.green, Color(0xFF145C26)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Text(initialLetter,
-                                      style: AppTheme.titleStyle.copyWith(
-                                          fontSize: 15, color: Colors.white)),
-                                ),
-                              ),
-                            ),
-                          ],
+                              );
+                            },
+                          ),
                         ),
                       ],
                     ),

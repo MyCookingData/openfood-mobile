@@ -1,15 +1,17 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../services/seed_service.dart';
 import '../providers/location_provider.dart';
 import '../providers/cart_provider.dart';
 import '../services/notification_service.dart';
 import 'address_picker_screen.dart';
 import 'auth/login_screen.dart' as auth_screen;
+import 'legal/legal_viewer_screen.dart';
+import '../../services/auth_service.dart';
+import '../../utils/ui_feedback.dart';
 
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onBackToHome;
@@ -20,82 +22,213 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final AuthService _authService = AuthService();
   final TextEditingController _phoneController = TextEditingController();
   bool _isPhoneValidated = false;
+  bool _isSendingOtp = false;
+  bool _isSendingEmail = false;
+
+  String? _userDisplayName;
+  String? _userFirstName;
+  String? _userLastName;
 
   @override
   void initState() {
     super.initState();
-    _loadPhoneState();
+    _loadUserProfile();
   }
 
-  Future<void> _loadPhoneState() async {
+  Future<void> _loadUserProfile() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isPhoneValidated = prefs.getBool('isPhoneValidated') ?? false;
-      _phoneController.text = prefs.getString('phoneNumber') ?? "+596 ";
-    });
+    final user = FirebaseAuth.instance.currentUser;
+
+    String? phone = prefs.getString('phoneNumber');
+    String? fName = prefs.getString('firstName');
+    String? lName = prefs.getString('lastName');
+    String? dName = prefs.getString('displayName');
+    bool isPhoneVal = prefs.getBool('isPhoneValidated') ?? false;
+
+    // Si non présent dans SharedPreferences et utilisateur connecté, interroger Firestore
+    if (user != null && (phone == null || phone.isEmpty || fName == null || fName.isEmpty)) {
+      final data = await _authService.getUserProfile(user.uid);
+      if (data != null) {
+        phone = data['phone'] ?? phone;
+        fName = data['firstName'] ?? fName;
+        lName = data['lastName'] ?? lName;
+        dName = data['displayName'] ?? dName;
+        if (data['isPhoneVerified'] == true) isPhoneVal = true;
+
+        if (phone != null) await prefs.setString('phoneNumber', phone);
+        if (fName != null) await prefs.setString('firstName', fName);
+        if (lName != null) await prefs.setString('lastName', lName);
+        if (dName != null) await prefs.setString('displayName', dName);
+        if (isPhoneVal) await prefs.setBool('isPhoneValidated', true);
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isPhoneValidated = isPhoneVal;
+        _userFirstName = fName;
+        _userLastName = lName;
+        _userDisplayName = dName;
+        if (phone != null && phone.isNotEmpty) {
+          _phoneController.text = phone;
+        } else if (_phoneController.text.isEmpty) {
+          _phoneController.text = "+596 ";
+        }
+      });
+    }
   }
 
   Future<void> _validatePhone() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isPhoneValidated', true);
-    await prefs.setString('phoneNumber', _phoneController.text);
-    setState(() => _isPhoneValidated = true);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("SMS envoyé ! Téléphone validé."),
-          backgroundColor: AppTheme.greenXl));
+    final rawPhone = _phoneController.text.trim();
+    if (rawPhone.isEmpty || rawPhone == "+596" || rawPhone.length < 8) {
+      UiFeedback.showError(
+        context,
+        "Veuillez renseigner un numéro de mobile valide.",
+      );
+      return;
     }
-  }
 
-  Future<void> _runSeeder() async {
-    final bool? confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("⚠️ ATTENTION"),
-        content: const Text(
-            "Voulez-vous vraiment effacer TOUTE la base de données et la recréer avec de fausses données de test ? Cette action est irréversible."),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("Annuler")),
-          ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.redL),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text("OUI, PURGER",
-                  style: TextStyle(color: Colors.white))),
-        ],
-      ),
-    );
+    final formattedPhone = AuthService.formatPhoneNumber(rawPhone);
 
-    if (confirm != true) return;
+    setState(() => _isSendingOtp = true);
 
     try {
+      await _authService.sendOTP(formattedPhone);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Purge & Seeding en cours..."),
-            backgroundColor: AppTheme.gold));
-      }
-      await SeedService.seedDatabase();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Base de données parfaitement recréée !"),
-            backgroundColor: AppTheme.greenXl));
+        setState(() => _isSendingOtp = false);
+        _showOtpVerificationDialog(formattedPhone);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text("Erreur: $e"), backgroundColor: AppTheme.redL));
+        setState(() => _isSendingOtp = false);
+        UiFeedback.showError(context, e.toString());
       }
     }
+  }
+
+  void _showOtpVerificationDialog(String formattedPhone) {
+    final otpController = TextEditingController();
+    bool isVerifying = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: AppTheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: AppTheme.surface3),
+            ),
+            title: const Row(
+              children: [
+                Icon(Icons.sms_rounded, color: AppTheme.greenXl),
+                SizedBox(width: 10),
+                Text("Validation Mobile", style: TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold, fontSize: 18)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Un code de validation à 6 chiffres a été envoyé par SMS au numéro suivant :",
+                  style: TextStyle(color: AppTheme.muted, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  formattedPhone,
+                  style: const TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppTheme.cream, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8),
+                  decoration: InputDecoration(
+                    counterText: "",
+                    hintText: "000000",
+                    hintStyle: TextStyle(color: AppTheme.muted2.withValues(alpha: 0.4), letterSpacing: 8),
+                    filled: true,
+                    fillColor: AppTheme.surface3,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isVerifying ? null : () => Navigator.pop(ctx),
+                child: const Text("Annuler", style: TextStyle(color: AppTheme.muted)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.greenXl,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: isVerifying
+                    ? null
+                    : () async {
+                        final code = otpController.text.trim();
+                        if (code.length != 6) {
+                          UiFeedback.showError(
+                            context,
+                            "Veuillez saisir les 6 chiffres du code SMS.",
+                          );
+                          return;
+                        }
+
+                        setDialogState(() => isVerifying = true);
+
+                        try {
+                          await _authService.verifyOTP(code, phoneNumber: formattedPhone);
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setBool('isPhoneValidated', true);
+                          await prefs.setString('phoneNumber', formattedPhone);
+
+                          if (mounted) {
+                            setState(() {
+                              _isPhoneValidated = true;
+                              _phoneController.text = formattedPhone;
+                            });
+                            Navigator.pop(ctx);
+                            UiFeedback.showSuccess(
+                              context,
+                              "Numéro de mobile validé avec succès !",
+                            );
+                          }
+                        } catch (e) {
+                          setDialogState(() => isVerifying = false);
+                          if (mounted) {
+                            UiFeedback.showError(context, "Code invalide : $e");
+                          }
+                        }
+                      },
+                child: isVerifying
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    : const Text("Valider", style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme
-          .bg, // Fix: AppTheme.bg au lieu de Colors.transparent pour l'affichage hors MainWrapper
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
         title: const Text("Mon Compte",
             style: TextStyle(
@@ -108,7 +241,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.arrow_downward,
-                color: AppTheme.cream), // Flèche orientée vers le menu du bas
+                color: AppTheme.cream),
             onPressed: () {
               if (widget.onBackToHome != null) {
                 widget.onBackToHome!();
@@ -129,35 +262,204 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 stream: FirebaseAuth.instance.authStateChanges(),
                 builder: (context, snapshot) {
                   final user = snapshot.data;
+
+                  // Calcul de l'initiale de l'avatar
+                  String initial = "C";
+                  if (_userFirstName != null && _userFirstName!.trim().isNotEmpty) {
+                    initial = _userFirstName!.trim().substring(0, 1).toUpperCase();
+                  } else if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
+                    initial = user.displayName!.trim().substring(0, 1).toUpperCase();
+                  }
+
+                  // Calcul du nom d'affichage complet
+                  String displayedName = "Client";
+                  if (_userFirstName != null && _userFirstName!.trim().isNotEmpty) {
+                    displayedName = _userLastName != null && _userLastName!.trim().isNotEmpty
+                        ? "${_userFirstName!.trim()} ${_userLastName!.trim()}"
+                        : _userFirstName!.trim();
+                  } else if (_userDisplayName != null && _userDisplayName!.trim().isNotEmpty) {
+                    displayedName = _userDisplayName!.trim();
+                  } else if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
+                    displayedName = user.displayName!.trim();
+                  } else if (user?.email != null) {
+                    displayedName = user!.email!.split('@').first;
+                  }
+
                   return Row(
                     children: [
-                      const CircleAvatar(
-                        radius: 36,
-                        backgroundColor: AppTheme.surface3,
-                        child: Text("ðŸ”", style: TextStyle(fontSize: 36)),
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppTheme.surface3,
+                          border: Border.all(color: AppTheme.greenXl, width: 2),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            fontFamily: 'Plus Jakarta Sans',
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                            color: AppTheme.cream,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(user?.email?.split('@').first ?? "Client",
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              displayedName,
                               style: const TextStyle(
                                   color: AppTheme.cream,
                                   fontSize: 22,
-                                  fontWeight: FontWeight.bold)),
-                          Text(user?.email ?? "Non connecté",
+                                  fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              user?.email ?? "Non connecté",
                               style: TextStyle(
                                   color: AppTheme.green.withValues(alpha: 0.8),
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w600)),
-                        ],
+                                  fontWeight: FontWeight.w600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ).animate().fade(duration: 400.ms).slideY(begin: 0.1);
                 }),
 
+            // --- Carte Statut Validation E-mail ---
+            StreamBuilder<User?>(
+              stream: FirebaseAuth.instance.authStateChanges(),
+              builder: (context, snapshot) {
+                final user = snapshot.data;
+                if (user == null) return const SizedBox.shrink();
+
+                final isVerified = user.emailVerified;
+
+                return Container(
+                  margin: const EdgeInsets.only(top: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isVerified
+                        ? const Color(0xFF1B5E20).withOpacity(0.14)
+                        : const Color(0xFFE65100).withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isVerified ? const Color(0xFFA5D6A7) : const Color(0xFFFFCC80),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isVerified ? Icons.mark_email_read_rounded : Icons.mark_email_unread_rounded,
+                        color: isVerified ? const Color(0xFFA5D6A7) : const Color(0xFFFFCC80),
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isVerified ? "Adresse e-mail validée" : "E-mail en attente de validation",
+                              style: TextStyle(
+                                color: isVerified ? Colors.white : const Color(0xFFFFCC80),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              isVerified
+                                  ? (user.email ?? "")
+                                  : "Vérifiez votre boîte de réception et spams (${user.email}).",
+                              style: TextStyle(
+                                color: isVerified ? AppTheme.muted : AppTheme.cream.withOpacity(0.9),
+                                fontSize: 11.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!isVerified) ...[
+                        const SizedBox(width: 6),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE65100),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: const Size(60, 32),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: _isSendingEmail
+                              ? null
+                              : () async {
+                                  setState(() => _isSendingEmail = true);
+                                  try {
+                                    await _authService.sendEmailVerification();
+                                    if (context.mounted) {
+                                      UiFeedback.showSuccess(
+                                        context,
+                                        "E-mail de confirmation renvoyé à ${user.email} ! Vérifiez également votre dossier Spams/Courriers indésirables.",
+                                        duration: const Duration(seconds: 7),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      UiFeedback.showError(context, e.toString());
+                                    }
+                                  } finally {
+                                    if (mounted) setState(() => _isSendingEmail = false);
+                                  }
+                                },
+                          child: _isSendingEmail
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Text(
+                                  "Renvoyer",
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                                ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh_rounded, color: AppTheme.cream, size: 20),
+                          tooltip: "Actualiser",
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
+                          onPressed: () async {
+                            final verified = await _authService.reloadAndCheckEmailVerified();
+                            if (context.mounted) {
+                              if (verified) {
+                                setState(() {});
+                                UiFeedback.showSuccess(context, "E-mail validé avec succès !");
+                              } else {
+                                UiFeedback.showInfo(context, "E-mail non encore validé. Cliquez sur le lien dans l'e-mail reçu.");
+                              }
+                            }
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+
+            const SizedBox(height: 24),
+
             // --- Section Localisation ---
-            const Text("ðŸ“ CARNET D'ADRESSES",
+            const Text("CARNET D'ADRESSES",
                     style: TextStyle(
                         color: AppTheme.muted,
                         fontSize: 11,
@@ -255,7 +557,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         // --- Section Téléphone ---
-                        const Text("📱 SÉCURITÉ & CONTACT",
+                        const Text("SÉCURITÉ & CONTACT",
                                 style: TextStyle(
                                     color: AppTheme.muted,
                                     fontSize: 11,
@@ -345,11 +647,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         borderRadius:
                                             BorderRadius.circular(12)),
                                   ),
-                                  onPressed: _validatePhone,
-                                  child: const Text(
-                                      "Valider ce numéro par SMS",
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold)),
+                                  onPressed: _isSendingOtp ? null : _validatePhone,
+                                  child: _isSendingOtp
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: AppTheme.greenXl,
+                                          ),
+                                        )
+                                      : const Text(
+                                          "Valider ce numéro par SMS",
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold)),
                                 ),
                             ],
                           ),
@@ -358,7 +669,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             .fade(duration: 400.ms, delay: 250.ms)
                             .slideX(begin: 0.05),
 
-                        const SizedBox(height: 48),
+                        const SizedBox(height: 32),
 
                         // --- Bouton Déconnexion ---
                         ElevatedButton.icon(
@@ -375,13 +686,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                           onPressed: () async {
-                            // Clean up cache for the current user
                             Provider.of<CartProvider>(context, listen: false)
                                 .clearCart();
                             final prefs = await SharedPreferences.getInstance();
                             await prefs.remove('isPhoneValidated');
                             await prefs.remove('phoneNumber');
-                            // Stop global services
                             NotificationService.instance.stopListening();
 
                             await FirebaseAuth.instance.signOut();
@@ -400,7 +709,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   } else {
                     return Column(
                       children: [
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 16),
                         // --- Bouton Connexion ---
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
@@ -433,21 +742,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 }),
 
             const SizedBox(height: 32),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.redL.withValues(alpha: 0.1),
-                foregroundColor: AppTheme.redL,
-                minimumSize: const Size(double.infinity, 54),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: AppTheme.redL, width: 2),
-                ),
+
+            // --- Section Informations Légales & CGU ---
+            const Text("⚖️ INFORMATIONS LÉGALES & CGU",
+                    style: TextStyle(
+                        color: AppTheme.muted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2))
+                .animate()
+                .fade(delay: 280.ms),
+            const SizedBox(height: 12),
+            Container(
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppTheme.border2),
               ),
-              onPressed: _runSeeder,
-              icon: const Icon(Icons.delete_forever),
-              label: const Text("Purger et Réinitialiser la BDD",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: AppTheme.surface3,
+                      child: Icon(Icons.gavel_rounded, color: AppTheme.greenXl, size: 20),
+                    ),
+                    title: const Text("Conditions Générales (CGU / CGV)",
+                        style: TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold, fontSize: 13.5)),
+                    subtitle: const Text("Commandes, livraisons, intermédiation N2D",
+                        style: TextStyle(color: AppTheme.muted, fontSize: 11)),
+                    trailing: const Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.muted2, size: 14),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LegalViewerScreen(initialTabIndex: 0)),
+                    ),
+                  ),
+                  const Divider(color: AppTheme.surface3, height: 1, indent: 16, endIndent: 16),
+                  ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: AppTheme.surface3,
+                      child: Icon(Icons.assignment_return_rounded, color: AppTheme.gold, size: 20),
+                    ),
+                    title: const Text("Politique de Remboursement",
+                        style: TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold, fontSize: 13.5)),
+                    subtitle: const Text("Indisponibilités, réclamations sous 24h",
+                        style: TextStyle(color: AppTheme.muted, fontSize: 11)),
+                    trailing: const Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.muted2, size: 14),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LegalViewerScreen(initialTabIndex: 1)),
+                    ),
+                  ),
+                  const Divider(color: AppTheme.surface3, height: 1, indent: 16, endIndent: 16),
+                  ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: AppTheme.surface3,
+                      child: Icon(Icons.security_rounded, color: AppTheme.greenXl, size: 20),
+                    ),
+                    title: const Text("Mentions Légales & RGPD",
+                        style: TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold, fontSize: 13.5)),
+                    subtitle: const Text("N2D NEW DELIVERY DRIVER SAS • RCS 992 130 476",
+                        style: TextStyle(color: AppTheme.muted, fontSize: 11)),
+                    trailing: const Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.muted2, size: 14),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LegalViewerScreen(initialTabIndex: 3)),
+                    ),
+                  ),
+                ],
+              ),
+            ).animate().fade(duration: 400.ms, delay: 300.ms),
+
             const SizedBox(height: 28),
 
             // --- Signature & Attribution Cooking Data ---

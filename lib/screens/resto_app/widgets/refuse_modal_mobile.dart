@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../../core/theme.dart';
+import '../../../utils/ui_feedback.dart';
 
 class RefuseModalMobile extends StatefulWidget {
   final String orderId;
@@ -24,10 +25,10 @@ class _RefuseModalMobileState extends State<RefuseModalMobile> {
   String? _selectedReason;
   
   final List<String> _reasons = [
-    "🚫 Rupture de stock",
-    "⏰ Trop de commandes en cours",
-    "🔒 Restaurant fermé",
-    "⚠️ Problème technique"
+    "Rupture de stock",
+    "Trop de commandes en cours",
+    "Restaurant fermé",
+    "Problème technique"
   ];
 
   @override
@@ -77,7 +78,7 @@ class _RefuseModalMobileState extends State<RefuseModalMobile> {
           GestureDetector(
             onTap: () {
               if (_selectedReason == null) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Veuillez choisir une raison"), backgroundColor: Color(0xFFFFB347)));
+                UiFeedback.showWarning(context, "Veuillez choisir un motif de refus.");
                 return;
               }
               widget.onConfirm(widget.orderId);
