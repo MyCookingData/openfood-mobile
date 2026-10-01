@@ -532,8 +532,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         _buildTicketRow("TVA calculée", cart.totalVat),
                           if (cart.activePromotion != null)
                             _buildTicketRow('Code "${cart.activePromotion!.code}"', -cart.calculateDiscount(), isAccent: true),
-                        if (!cart.isClickAndCollect) _buildTicketRow("Frais de livraison", cart.deliveryFee),
-                        _buildTicketRow("Frais de service", cart.managementFee),
+                        if (!cart.isClickAndCollect) ...[
+                          _buildTicketRow("Frais de livraison", cart.deliveryFee),
+                          if (cart.isSmallOrder)
+                            _buildTicketRow("Taxe petite commande (< 15 €)", cart.smallOrderFee, isWarning: true)
+                          else
+                            _buildTicketRow("Taxe petite commande", 0.0, isFreeBenefit: true),
+                        ],
+                        _buildTicketRow("Frais de service (5%)", cart.managementFee),
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 12),
                           child: Divider(color: Colors.white24, height: 1),
@@ -598,16 +604,39 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  Widget _buildTicketRow(String label, double amount, {bool isAccent = false}) {
+  Widget _buildTicketRow(
+    String label, 
+    double amount, {
+    bool isAccent = false, 
+    bool isWarning = false,
+    bool isFreeBenefit = false,
+  }) {
+    Color textColor = AppTheme.cream;
+    Color labelColor = AppTheme.muted2;
+    String displayAmount = "${amount > 0 && !isAccent ? '' : amount < 0 ? '-' : ''}${amount.abs().toStringAsFixed(2).replaceAll('.', ',')} €";
+
+    if (isAccent) {
+      textColor = AppTheme.gold;
+      labelColor = AppTheme.gold;
+    } else if (isWarning) {
+      textColor = AppTheme.gold;
+      labelColor = AppTheme.gold;
+      displayAmount = "+ ${amount.toStringAsFixed(2).replaceAll('.', ',')} €";
+    } else if (isFreeBenefit) {
+      textColor = AppTheme.greenXl;
+      labelColor = AppTheme.muted2;
+      displayAmount = "0,00 € (Offert dès 15 €)";
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: isAccent ? AppTheme.gold : AppTheme.muted2, fontSize: 13, fontWeight: isAccent ? FontWeight.w600 : FontWeight.normal)),
+          Text(label, style: TextStyle(color: labelColor, fontSize: 13, fontWeight: (isAccent || isWarning) ? FontWeight.w600 : FontWeight.normal)),
           Text(
-            "${amount > 0 && !isAccent ? '' : amount < 0 ? '-' : ''}${amount.abs().toStringAsFixed(2).replaceAll('.', ',')} €",
-            style: TextStyle(color: isAccent ? AppTheme.gold : AppTheme.cream, fontSize: 14, fontWeight: isAccent ? FontWeight.w700 : FontWeight.w600),
+            displayAmount,
+            style: TextStyle(color: textColor, fontSize: 14, fontWeight: (isAccent || isWarning || isFreeBenefit) ? FontWeight.w700 : FontWeight.w600),
           ),
         ],
       ),

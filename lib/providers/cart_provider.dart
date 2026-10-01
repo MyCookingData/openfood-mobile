@@ -153,6 +153,32 @@ class CartProvider with ChangeNotifier {
     return double.parse((subtotalAmount * 0.05).toStringAsFixed(2));
   }
 
+  /// Seuil de commande minimum en livraison pour exemption des frais de petite commande
+  static const double smallOrderThreshold = 15.0;
+
+  /// Montant de la taxe / supplément "Petite commande"
+  static const double smallOrderFeeAmount = 2.0;
+
+  /// Indique si la commande est soumise aux frais de petite commande (< 15€ et uniquement en livraison)
+  bool get isSmallOrder => !isClickAndCollect && _items.isNotEmpty && subtotalAmount < smallOrderThreshold;
+
+  /// Montant effectif des frais de petite commande (2.00 € si sous-total < 15 € en livraison, 0 € sinon)
+  double get smallOrderFee => isSmallOrder ? smallOrderFeeAmount : 0.0;
+
+  /// Montant restant à ajouter au panier pour annuler la taxe de petite commande (Reverse promo)
+  double get remainingForFreeSmallOrder {
+    if (!isSmallOrder) return 0.0;
+    final diff = smallOrderThreshold - subtotalAmount;
+    return diff > 0 ? double.parse(diff.toStringAsFixed(2)) : 0.0;
+  }
+
+  /// Progression vers l'exemption de la taxe petite commande (0.0 -> 1.0)
+  double get smallOrderProgress {
+    if (_items.isEmpty) return 0.0;
+    if (subtotalAmount >= smallOrderThreshold) return 1.0;
+    return (subtotalAmount / smallOrderThreshold).clamp(0.0, 1.0);
+  }
+
   CartProvider() {
     _loadCartFromPrefs();
   }
@@ -196,14 +222,14 @@ class CartProvider with ChangeNotifier {
     return double.parse(total.toStringAsFixed(2));
   }
 
-  /// Total après remise, livraison et gestion
+  /// Total après remise, livraison, gestion et supplément petite commande
   double get totalFinal {
     if (_items.isEmpty) return 0.0;
     
     double discountedSubtotal = subtotalAmount - calculateDiscount();
     if (discountedSubtotal < 0) discountedSubtotal = 0; // Sécurité
 
-    double finalAmt = discountedSubtotal + (deliveryFee > 0 ? deliveryFee : 0) + managementFee;
+    double finalAmt = discountedSubtotal + (deliveryFee > 0 ? deliveryFee : 0) + managementFee + smallOrderFee;
     return double.parse(finalAmt.toStringAsFixed(2));
   }
 

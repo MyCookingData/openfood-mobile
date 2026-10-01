@@ -254,6 +254,132 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
+  Widget _buildSmallOrderPromoBanner(CartProvider cart) {
+    if (cart.isClickAndCollect || cart.items.isEmpty) return const SizedBox.shrink();
+
+    final isSmall = cart.isSmallOrder;
+    final remaining = cart.remainingForFreeSmallOrder;
+    final progress = cart.smallOrderProgress;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isSmall
+              ? [const Color(0xFF2E1C0A), const Color(0xFF1E1306)]
+              : [const Color(0xFF0C2715), const Color(0xFF091D10)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSmall ? AppTheme.gold.withValues(alpha: 0.5) : AppTheme.greenXl.withValues(alpha: 0.5),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (isSmall ? AppTheme.gold : AppTheme.greenXl).withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: (isSmall ? AppTheme.gold : AppTheme.greenXl).withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isSmall ? Icons.savings_outlined : Icons.check_circle_outline,
+                  color: isSmall ? AppTheme.gold : AppTheme.greenXl,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isSmall ? "Bon plan : Économisez 2,00 €" : "Économie débloquée : 2,00 € offerts",
+                  style: TextStyle(
+                    color: isSmall ? AppTheme.gold : AppTheme.greenXl,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isSmall ? AppTheme.gold.withValues(alpha: 0.3) : AppTheme.greenXl.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Text(
+                  isSmall ? "+ 2,00 € si < 15 €" : "0,00 € dès 15 €",
+                  style: TextStyle(
+                    color: isSmall ? AppTheme.gold : AppTheme.greenXl,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            isSmall
+                ? "Ajoutez encore ${remaining.toStringAsFixed(2)} € pour supprimer automatiquement les 2,00 € de frais de petite commande !"
+                : "Votre commande atteint 15,00 € : les frais de petite commande de 2,00 € vous sont intégralement offerts.",
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 12,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: Colors.white.withValues(alpha: 0.1),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isSmall ? AppTheme.gold : AppTheme.greenXl,
+              ),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "${cart.subtotalAmount.toStringAsFixed(2)} €",
+                style: const TextStyle(color: Colors.white54, fontSize: 10),
+              ),
+              Text(
+                "Seuil : 15,00 €",
+                style: TextStyle(
+                  color: isSmall ? AppTheme.gold : AppTheme.greenXl,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomSummary(BuildContext context, CartProvider cart) {
     // Calcul du sous-total TTC des articles avant frais de service
     double subTotal = 0;
@@ -277,6 +403,7 @@ class _CartScreenState extends State<CartScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildSmallOrderPromoBanner(cart),
           Text("Résumé de la commande", style: AppTheme.titleStyle.copyWith(fontSize: 18)),
           const SizedBox(height: 16),
           // Sous-total HT
@@ -306,19 +433,71 @@ class _CartScreenState extends State<CartScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          // Frais
+          // Frais de livraison
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Frais (Livraison & Gestion)", style: TextStyle(color: AppTheme.muted, fontSize: 14)),
+              const Text("Frais de livraison", style: TextStyle(color: AppTheme.muted, fontSize: 14)),
               Text(
                 cart.deliveryFee < 0 
                   ? "Non disponible" 
-                  : "${(cart.deliveryFee + cart.managementFee).toStringAsFixed(2)} €", 
+                  : "${cart.deliveryFee.toStringAsFixed(2)} €", 
                 style: TextStyle(color: cart.deliveryFee < 0 ? AppTheme.red : AppTheme.cream, fontSize: 14, fontWeight: FontWeight.w600)
               ),
             ],
           ),
+          const SizedBox(height: 8),
+          // Frais de gestion
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Frais de service (5%)", style: TextStyle(color: AppTheme.muted, fontSize: 14)),
+              Text(
+                "${cart.managementFee.toStringAsFixed(2)} €", 
+                style: const TextStyle(color: AppTheme.cream, fontSize: 14, fontWeight: FontWeight.w600)
+              ),
+            ],
+          ),
+          if (!cart.isClickAndCollect) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "Frais petite commande",
+                      style: TextStyle(
+                        color: cart.isSmallOrder ? AppTheme.gold : AppTheme.muted,
+                        fontSize: 14,
+                        fontWeight: cart.isSmallOrder ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Tooltip(
+                      message: "Supplément de 2,00 € pour les commandes en livraison inférieures à 15,00 €.",
+                      child: Icon(
+                        Icons.info_outline,
+                        size: 14,
+                        color: cart.isSmallOrder ? AppTheme.gold : AppTheme.muted,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  cart.isSmallOrder 
+                    ? "+ 2,00 €" 
+                    : "0,00 € (Offert dès 15 €)",
+                  style: TextStyle(
+                    color: cart.isSmallOrder ? AppTheme.gold : AppTheme.greenXl,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (cart.deliveryFee < 0) ...[
             const SizedBox(height: 8),
             const Text(
