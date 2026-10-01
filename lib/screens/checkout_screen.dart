@@ -625,7 +625,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     } else if (isFreeBenefit) {
       textColor = AppTheme.greenXl;
       labelColor = AppTheme.muted2;
-      displayAmount = "0,00 € (Offert dès 15 €)";
+      displayAmount = "Offerte (0,00 €)";
     }
 
     return Padding(

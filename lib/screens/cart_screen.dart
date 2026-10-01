@@ -297,7 +297,7 @@ class _CartScreenState extends State<CartScreen> {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  isSmall ? Icons.savings_outlined : Icons.check_circle_outline,
+                  isSmall ? Icons.card_giftcard_rounded : Icons.check_circle_outline,
                   color: isSmall ? AppTheme.gold : AppTheme.greenXl,
                   size: 18,
                 ),
@@ -305,7 +305,7 @@ class _CartScreenState extends State<CartScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  isSmall ? "Bon plan : Économisez 2,00 €" : "Économie débloquée : 2,00 € offerts",
+                  isSmall ? "Bon plan : 2,00 € de taxe offerts dès 15 €" : "Bon plan débloqué : Taxe de 2,00 € offerte",
                   style: TextStyle(
                     color: isSmall ? AppTheme.gold : AppTheme.greenXl,
                     fontSize: 13,
@@ -324,7 +324,7 @@ class _CartScreenState extends State<CartScreen> {
                   ),
                 ),
                 child: Text(
-                  isSmall ? "+ 2,00 € si < 15 €" : "0,00 € dès 15 €",
+                  isSmall ? "+ 2,00 € si < 15 €" : "2,00 € OFFERTS",
                   style: TextStyle(
                     color: isSmall ? AppTheme.gold : AppTheme.greenXl,
                     fontSize: 11,
@@ -337,8 +337,8 @@ class _CartScreenState extends State<CartScreen> {
           const SizedBox(height: 8),
           Text(
             isSmall
-                ? "Ajoutez encore ${remaining.toStringAsFixed(2)} € pour supprimer automatiquement les 2,00 € de frais de petite commande !"
-                : "Votre commande atteint 15,00 € : les frais de petite commande de 2,00 € vous sont intégralement offerts.",
+                ? "Ajoutez encore ${remaining.toStringAsFixed(2)} € pour vous faire offrir intégralement la taxe petite commande de 2,00 € !"
+                : "Félicitations ! Votre commande atteint 15,00 € : la taxe petite commande de 2,00 € vous est intégralement offerte.",
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.9),
               fontSize: 12,
@@ -366,7 +366,7 @@ class _CartScreenState extends State<CartScreen> {
                 style: const TextStyle(color: Colors.white54, fontSize: 10),
               ),
               Text(
-                "Seuil : 15,00 €",
+                "Objectif : 15,00 €",
                 style: TextStyle(
                   color: isSmall ? AppTheme.gold : AppTheme.greenXl,
                   fontSize: 10,
@@ -467,7 +467,7 @@ class _CartScreenState extends State<CartScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      "Frais petite commande",
+                      "Taxe petite commande",
                       style: TextStyle(
                         color: cart.isSmallOrder ? AppTheme.gold : AppTheme.muted,
                         fontSize: 14,
@@ -476,7 +476,7 @@ class _CartScreenState extends State<CartScreen> {
                     ),
                     const SizedBox(width: 4),
                     Tooltip(
-                      message: "Supplément de 2,00 € pour les commandes en livraison inférieures à 15,00 €.",
+                      message: "Taxe de 2,00 € pour les commandes en livraison inférieures à 15,00 € (offerte dès 15,00 €).",
                       child: Icon(
                         Icons.info_outline,
                         size: 14,
@@ -488,7 +488,7 @@ class _CartScreenState extends State<CartScreen> {
                 Text(
                   cart.isSmallOrder 
                     ? "+ 2,00 €" 
-                    : "0,00 € (Offert dès 15 €)",
+                    : "Offerte (0,00 €)",
                   style: TextStyle(
                     color: cart.isSmallOrder ? AppTheme.gold : AppTheme.greenXl,
                     fontSize: 14,
