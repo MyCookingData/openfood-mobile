@@ -14,7 +14,7 @@ class OrderSuccessScreen extends StatefulWidget {
 class _OrderSuccessScreenState extends State<OrderSuccessScreen> {
 
   Timer? _timer;
-  int _secondsLeft = 120; // 2 minutes
+  int _secondsLeft = 300; // 5 minutes
 
   @override
   void initState() {
@@ -114,7 +114,7 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen> {
                         const SizedBox(height: 12),
                         Text(
                           _secondsLeft > 0 
-                            ? "Le restaurateur a 2 minutes pour accepter." 
+                            ? "Le restaurateur a 5 minutes pour accepter." 
                             : "Temps écoulé, nous contactons le restaurateur.",
                           textAlign: TextAlign.center,
                           style: TextStyle(
