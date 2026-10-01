@@ -63,26 +63,77 @@ class AuthService {
   // Normalisation du numéro au format international E.164
   static String formatPhoneNumber(String raw) {
     String cleaned = raw.replaceAll(RegExp(r'[\s\-\.\(\)]'), '');
+    if (cleaned.isEmpty) return '';
+
     if (cleaned.startsWith('00')) {
       cleaned = '+${cleaned.substring(2)}';
+    }
+
+    // Si commence déjà par un indicatif international avec '+'
+    if (cleaned.startsWith('+596')) {
+      String rest = cleaned.substring(4);
+      if (rest.startsWith('0')) rest = rest.substring(1);
+      return '+596$rest';
+    }
+    if (cleaned.startsWith('+590')) {
+      String rest = cleaned.substring(4);
+      if (rest.startsWith('0')) rest = rest.substring(1);
+      return '+590$rest';
+    }
+    if (cleaned.startsWith('+594')) {
+      String rest = cleaned.substring(4);
+      if (rest.startsWith('0')) rest = rest.substring(1);
+      return '+594$rest';
+    }
+    if (cleaned.startsWith('+33')) {
+      String rest = cleaned.substring(3);
+      if (rest.startsWith('0')) rest = rest.substring(1);
+      return '+33$rest';
     }
     if (cleaned.startsWith('+')) {
       return cleaned;
     }
-    // Antilles & Guyane
+
+    // Sans indicatif international
+    // Antilles & Guyane (avec 0 initial: 0696..., 0690..., 0694..., 0596..., etc.)
     if (cleaned.startsWith('0696') || cleaned.startsWith('0697') || cleaned.startsWith('0596')) {
       return '+596${cleaned.substring(1)}';
     }
-    if (cleaned.startsWith('0690') || cleaned.startsWith('0590')) {
+    if (cleaned.startsWith('0690') || cleaned.startsWith('0691') || cleaned.startsWith('0590')) {
       return '+590${cleaned.substring(1)}';
     }
     if (cleaned.startsWith('0694') || cleaned.startsWith('0594')) {
       return '+594${cleaned.substring(1)}';
     }
-    // Métropole
+
+    // Antilles & Guyane (sans 0 initial: 696..., 690..., 694..., 596...)
+    if (cleaned.startsWith('696') || cleaned.startsWith('697')) {
+      return '+596$cleaned';
+    }
+    if (cleaned.startsWith('690') || cleaned.startsWith('691')) {
+      return '+590$cleaned';
+    }
+    if (cleaned.startsWith('694')) {
+      return '+594$cleaned';
+    }
+    if (cleaned.startsWith('596') && cleaned.length >= 9) {
+      return '+596$cleaned';
+    }
+    if (cleaned.startsWith('590') && cleaned.length >= 9) {
+      return '+590$cleaned';
+    }
+    if (cleaned.startsWith('594') && cleaned.length >= 9) {
+      return '+594$cleaned';
+    }
+
+    // Métropole (06..., 07..., 01..., etc.)
     if (cleaned.startsWith('06') || cleaned.startsWith('07') || cleaned.startsWith('01') || cleaned.startsWith('02') || cleaned.startsWith('03') || cleaned.startsWith('04') || cleaned.startsWith('05')) {
       return '+33${cleaned.substring(1)}';
     }
+    if (cleaned.startsWith('6') || cleaned.startsWith('7')) {
+      return '+33$cleaned';
+    }
+
     return '+$cleaned';
   }
 

@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
@@ -25,6 +26,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   final TextEditingController _phoneController = TextEditingController();
   bool _isPhoneValidated = false;
+  String _validatedPhone = '';
   bool _isSendingOtp = false;
   bool _isSendingEmail = false;
 
@@ -36,6 +38,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadUserProfile();
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserProfile() async {
@@ -74,24 +82,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _userDisplayName = dName;
         if (phone != null && phone.isNotEmpty) {
           _phoneController.text = phone;
-        } else if (_phoneController.text.isEmpty) {
-          _phoneController.text = "+596 ";
+          if (isPhoneVal) {
+            _validatedPhone = AuthService.formatPhoneNumber(phone);
+          }
         }
+      });
+    }
+  }
+
+  void _onPhoneChanged(String val) {
+    final cleanInput = AuthService.formatPhoneNumber(val);
+    final isMatching = _validatedPhone.isNotEmpty && cleanInput == _validatedPhone;
+    if (_isPhoneValidated != isMatching) {
+      setState(() {
+        _isPhoneValidated = isMatching;
       });
     }
   }
 
   Future<void> _validatePhone() async {
     final rawPhone = _phoneController.text.trim();
-    if (rawPhone.isEmpty || rawPhone == "+596" || rawPhone.length < 8) {
+    final formattedPhone = AuthService.formatPhoneNumber(rawPhone);
+    if (rawPhone.isEmpty || formattedPhone.length < 9) {
       UiFeedback.showError(
         context,
-        "Veuillez renseigner un numéro de mobile valide.",
+        "Veuillez renseigner un numéro de mobile valide (ex : 0696 12 34 56).",
       );
       return;
     }
-
-    final formattedPhone = AuthService.formatPhoneNumber(rawPhone);
 
     setState(() => _isSendingOtp = true);
 
@@ -104,122 +122,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSendingOtp = false);
-        UiFeedback.showError(context, e.toString());
+        UiFeedback.showError(context, e.toString().replaceAll("Exception: ", ""));
       }
     }
   }
 
   void _showOtpVerificationDialog(String formattedPhone) {
-    final otpController = TextEditingController();
-    bool isVerifying = false;
-
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: AppTheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: const BorderSide(color: AppTheme.surface3),
-            ),
-            title: const Row(
-              children: [
-                Icon(Icons.sms_rounded, color: AppTheme.greenXl),
-                SizedBox(width: 10),
-                Text("Validation Mobile", style: TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Un code de validation à 6 chiffres a été envoyé par SMS au numéro suivant :",
-                  style: TextStyle(color: AppTheme.muted, fontSize: 13),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  formattedPhone,
-                  style: const TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold, fontSize: 15),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: otpController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.cream, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8),
-                  decoration: InputDecoration(
-                    counterText: "",
-                    hintText: "000000",
-                    hintStyle: TextStyle(color: AppTheme.muted2.withValues(alpha: 0.4), letterSpacing: 8),
-                    filled: true,
-                    fillColor: AppTheme.surface3,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: isVerifying ? null : () => Navigator.pop(ctx),
-                child: const Text("Annuler", style: TextStyle(color: AppTheme.muted)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.greenXl,
-                  foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: isVerifying
-                    ? null
-                    : () async {
-                        final code = otpController.text.trim();
-                        if (code.length != 6) {
-                          UiFeedback.showError(
-                            context,
-                            "Veuillez saisir les 6 chiffres du code SMS.",
-                          );
-                          return;
-                        }
+      builder: (ctx) => _OtpVerificationDialog(
+        formattedPhone: formattedPhone,
+        authService: _authService,
+        onSuccess: (verifiedNumber) async {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('isPhoneValidated', true);
+          await prefs.setString('phoneNumber', verifiedNumber);
 
-                        setDialogState(() => isVerifying = true);
-
-                        try {
-                          await _authService.verifyOTP(code, phoneNumber: formattedPhone);
-                          final prefs = await SharedPreferences.getInstance();
-                          await prefs.setBool('isPhoneValidated', true);
-                          await prefs.setString('phoneNumber', formattedPhone);
-
-                          if (mounted) {
-                            setState(() {
-                              _isPhoneValidated = true;
-                              _phoneController.text = formattedPhone;
-                            });
-                            Navigator.pop(ctx);
-                            UiFeedback.showSuccess(
-                              context,
-                              "Numéro de mobile validé avec succès !",
-                            );
-                          }
-                        } catch (e) {
-                          setDialogState(() => isVerifying = false);
-                          if (mounted) {
-                            UiFeedback.showError(context, "Code invalide : $e");
-                          }
-                        }
-                      },
-                child: isVerifying
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                    : const Text("Valider", style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          );
+          if (mounted) {
+            setState(() {
+              _isPhoneValidated = true;
+              _validatedPhone = verifiedNumber;
+              _phoneController.text = verifiedNumber;
+            });
+            UiFeedback.showSuccess(
+              context,
+              "Numéro de mobile validé avec succès !",
+            );
+          }
         },
       ),
     );
@@ -581,7 +511,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 children: [
                                   const Text("Numéro de téléphone",
                                       style: TextStyle(
-                                          color: AppTheme.cream, fontSize: 14)),
+                                          color: AppTheme.cream, fontSize: 14, fontWeight: FontWeight.bold)),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 10, vertical: 4),
@@ -589,20 +519,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       color: _isPhoneValidated
                                           ? AppTheme.green
                                               .withValues(alpha: 0.2)
-                                          : AppTheme.redL
+                                          : const Color(0xFFE65100)
                                               .withValues(alpha: 0.2),
                                       borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: _isPhoneValidated
+                                            ? AppTheme.green
+                                            : const Color(0xFFFFCC80),
+                                        width: 1,
+                                      ),
                                     ),
-                                    child: Text(
-                                      _isPhoneValidated
-                                          ? "Vérifié"
-                                          : "Non vérifié",
-                                      style: TextStyle(
-                                          color: _isPhoneValidated
-                                              ? AppTheme.green
-                                              : AppTheme.redL,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _isPhoneValidated ? Icons.verified_rounded : Icons.warning_amber_rounded,
+                                          size: 14,
+                                          color: _isPhoneValidated ? AppTheme.green : const Color(0xFFFFCC80),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          _isPhoneValidated ? "Numéro vérifié" : "Non vérifié",
+                                          style: TextStyle(
+                                              color: _isPhoneValidated ? AppTheme.green : const Color(0xFFFFCC80),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
@@ -614,14 +557,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     child: TextField(
                                       controller: _phoneController,
                                       keyboardType: TextInputType.phone,
+                                      onChanged: _onPhoneChanged,
                                       style: const TextStyle(
                                           color: AppTheme.cream,
                                           fontWeight: FontWeight.w600,
-                                          letterSpacing: 1.5),
+                                          letterSpacing: 1.2),
                                       decoration: InputDecoration(
                                         filled: true,
                                         fillColor: AppTheme.surface3,
-                                        prefixIcon: const Icon(Icons.phone,
+                                        hintText: "Ex : 0696 12 34 56",
+                                        hintStyle: TextStyle(color: AppTheme.muted2.withValues(alpha: 0.5)),
+                                        prefixIcon: const Icon(Icons.phone_iphone_rounded,
                                             color: AppTheme.muted2, size: 20),
                                         contentPadding:
                                             const EdgeInsets.symmetric(
@@ -635,32 +581,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 8),
+                              const Text(
+                                "Requis pour les notifications de livraison et le contact livreur.",
+                                style: TextStyle(color: AppTheme.muted, fontSize: 11.5),
+                              ),
+                              const SizedBox(height: 14),
                               if (!_isPhoneValidated)
-                                ElevatedButton(
+                                ElevatedButton.icon(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.surface3,
-                                    foregroundColor: AppTheme.cream,
+                                    backgroundColor: AppTheme.greenXl,
+                                    foregroundColor: Colors.black,
                                     minimumSize:
                                         const Size(double.infinity, 48),
                                     shape: RoundedRectangleBorder(
                                         borderRadius:
                                             BorderRadius.circular(12)),
                                   ),
-                                  onPressed: _isSendingOtp ? null : _validatePhone,
-                                  child: _isSendingOtp
+                                  icon: _isSendingOtp
                                       ? const SizedBox(
-                                          width: 22,
-                                          height: 22,
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.black,
+                                          ),
+                                        )
+                                      : const Icon(Icons.sms_rounded, size: 20),
+                                  label: Text(
+                                    _isSendingOtp
+                                        ? "Envoi du SMS..."
+                                        : "Valider ce numéro par SMS",
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                  onPressed: _isSendingOtp ? null : _validatePhone,
+                                )
+                              else
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.cream,
+                                    side: const BorderSide(color: AppTheme.surface3),
+                                    minimumSize:
+                                        const Size(double.infinity, 42),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
+                                  ),
+                                  icon: _isSendingOtp
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2,
                                             color: AppTheme.greenXl,
                                           ),
                                         )
-                                      : const Text(
-                                          "Valider ce numéro par SMS",
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.bold)),
+                                      : const Icon(Icons.refresh_rounded, size: 18, color: AppTheme.greenXl),
+                                  label: Text(
+                                    _isSendingOtp
+                                        ? "Envoi du SMS..."
+                                        : "Re-valider / Tester ce numéro par SMS",
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600, fontSize: 13),
+                                  ),
+                                  onPressed: _isSendingOtp ? null : _validatePhone,
                                 ),
                             ],
                           ),
@@ -891,3 +876,208 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
+
+class _OtpVerificationDialog extends StatefulWidget {
+  final String formattedPhone;
+  final AuthService authService;
+  final Function(String phone) onSuccess;
+
+  const _OtpVerificationDialog({
+    required this.formattedPhone,
+    required this.authService,
+    required this.onSuccess,
+  });
+
+  @override
+  State<_OtpVerificationDialog> createState() => _OtpVerificationDialogState();
+}
+
+class _OtpVerificationDialogState extends State<_OtpVerificationDialog> {
+  final TextEditingController _otpController = TextEditingController();
+  bool _isVerifying = false;
+  bool _isResending = false;
+  int _resendCountdown = 60;
+  Timer? _timer;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _resendCountdown = 60;
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      if (_resendCountdown > 0) {
+        setState(() => _resendCountdown--);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _otpController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleVerify() async {
+    final code = _otpController.text.trim();
+    if (code.length != 6) {
+      setState(() => _errorMessage = "Veuillez saisir les 6 chiffres du code SMS.");
+      return;
+    }
+
+    setState(() {
+      _isVerifying = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await widget.authService.verifyOTP(code, phoneNumber: widget.formattedPhone);
+      if (mounted) {
+        widget.onSuccess(widget.formattedPhone);
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
+          _errorMessage = e.toString().replaceAll("Exception: ", "");
+        });
+      }
+    }
+  }
+
+  Future<void> _handleResend() async {
+    if (_resendCountdown > 0 || _isResending) return;
+
+    setState(() {
+      _isResending = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await widget.authService.sendOTP(widget.formattedPhone);
+      if (mounted) {
+        setState(() => _isResending = false);
+        _startCountdown();
+        UiFeedback.showSuccess(context, "Un nouveau code SMS a été envoyé.");
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isResending = false;
+          _errorMessage = e.toString().replaceAll("Exception: ", "");
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: AppTheme.surface3),
+      ),
+      title: const Row(
+        children: [
+          Icon(Icons.sms_rounded, color: AppTheme.greenXl),
+          SizedBox(width: 10),
+          Text("Validation Mobile", style: TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold, fontSize: 18)),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Un code de validation à 6 chiffres a été envoyé par SMS au numéro suivant :",
+            style: TextStyle(color: AppTheme.muted, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            widget.formattedPhone,
+            style: const TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _otpController,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            textAlign: TextAlign.center,
+            autofocus: true,
+            style: const TextStyle(color: AppTheme.cream, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8),
+            decoration: InputDecoration(
+              counterText: "",
+              hintText: "000000",
+              hintStyle: TextStyle(color: AppTheme.muted2.withValues(alpha: 0.4), letterSpacing: 8),
+              filled: true,
+              fillColor: AppTheme.surface3,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            onChanged: (val) {
+              if (val.trim().length == 6 && !_isVerifying) {
+                _handleVerify();
+              }
+            },
+          ),
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _errorMessage!,
+              style: const TextStyle(color: AppTheme.redL, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Center(
+            child: TextButton.icon(
+              onPressed: (_resendCountdown == 0 && !_isResending) ? _handleResend : null,
+              icon: _isResending
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.greenXl))
+                  : const Icon(Icons.refresh_rounded, size: 16),
+              label: Text(
+                _resendCountdown > 0
+                    ? "Renvoyer le code ($_resendCountdown s)"
+                    : "Renvoyer un nouveau code SMS",
+                style: TextStyle(
+                  color: _resendCountdown > 0 ? AppTheme.muted : AppTheme.greenXl,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isVerifying ? null : () => Navigator.pop(context),
+          child: const Text("Annuler", style: TextStyle(color: AppTheme.muted)),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.greenXl,
+            foregroundColor: Colors.black,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          onPressed: _isVerifying ? null : _handleVerify,
+          child: _isVerifying
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+              : const Text("Valider", style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+}
+
