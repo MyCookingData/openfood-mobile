@@ -82,11 +82,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String? dName = prefs.getString('displayName');
     bool isPhoneVal = prefs.getBool('isPhoneValidated') ?? false;
 
-    // Cooldown persistant
-    final lastSent = prefs.getInt('last_otp_sent_ms') ?? 0;
-    final elapsed = (DateTime.now().millisecondsSinceEpoch - lastSent) ~/ 1000;
-    if (elapsed < 180) {
-      _startCooldown(180 - elapsed);
+    // Cooldown persistant pour le numéro chargé
+    if (phone != null && phone.isNotEmpty) {
+      final formatted = AuthService.formatPhoneNumber(phone);
+      final lastSent = prefs.getInt('last_otp_sent_ms_$formatted') ?? 0;
+      final elapsed = (DateTime.now().millisecondsSinceEpoch - lastSent) ~/ 1000;
+      if (elapsed < 180) {
+        _startCooldown(180 - elapsed);
+      }
     }
 
     // Si non présent dans SharedPreferences et utilisateur connecté, interroger Firestore
@@ -123,6 +126,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _checkCooldownForNumber(String formattedPhone) async {
+    if (formattedPhone.isEmpty) {
+      _cooldownTimer?.cancel();
+      if (mounted) setState(() => _cooldownSeconds = 0);
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final lastSent = prefs.getInt('last_otp_sent_ms_$formattedPhone') ?? 0;
+    final elapsed = (DateTime.now().millisecondsSinceEpoch - lastSent) ~/ 1000;
+    if (elapsed < 180) {
+      _startCooldown(180 - elapsed);
+    } else {
+      _cooldownTimer?.cancel();
+      if (mounted) setState(() => _cooldownSeconds = 0);
+    }
+  }
+
   void _onPhoneChanged(String val) {
     final cleanInput = AuthService.formatPhoneNumber(val);
     final isMatching = _validatedPhone.isNotEmpty && cleanInput == _validatedPhone;
@@ -130,6 +150,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _isPhoneValidated = isMatching;
       });
+    }
+    _checkCooldownForNumber(cleanInput);
+  }
+
+  Future<void> _saveValidatedPhone(String verifiedNumber) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isPhoneValidated', true);
+    await prefs.setString('phoneNumber', verifiedNumber);
+
+    // Enregistrement persistant dans Firestore
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'phone': verifiedNumber,
+          'isPhoneVerified': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint("Erreur sauvegarde Firestore phone: $e");
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isPhoneValidated = true;
+        _validatedPhone = verifiedNumber;
+        _phoneController.text = verifiedNumber;
+        _cooldownSeconds = 0;
+      });
+      _cooldownTimer?.cancel();
+      UiFeedback.showSuccess(
+        context,
+        "Numéro de mobile enregistré et validé avec succès !",
+      );
     }
   }
 
@@ -144,7 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    // 1. Interdiction stricte de re-tester un numéro déjà validé
+    // 1. Interdiction de re-tester un numéro déjà validé
     if (_isPhoneValidated && _validatedPhone.isNotEmpty && formattedPhone == _validatedPhone) {
       UiFeedback.showInfo(
         context,
@@ -153,11 +208,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    // 2. Limitation à une tentative toutes les 3 minutes
+    // 2. Limitation à une tentative toutes les 3 minutes par numéro
     if (_cooldownSeconds > 0) {
       UiFeedback.showWarning(
         context,
-        "Veuillez patienter encore ${_formatCooldown(_cooldownSeconds)} avant de demander un nouveau code pour ce numéro.",
+        "Veuillez patienter encore ${_formatCooldown(_cooldownSeconds)} avant de redemander un code pour ce numéro.",
       );
       return;
     }
@@ -167,7 +222,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await _authService.sendOTP(formattedPhone);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('last_otp_sent_ms', DateTime.now().millisecondsSinceEpoch);
+      await prefs.setInt('last_otp_sent_ms_$formattedPhone', DateTime.now().millisecondsSinceEpoch);
       _startCooldown(180);
 
       if (mounted) {
@@ -177,9 +232,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSendingOtp = false);
-        UiFeedback.showError(context, e.toString().replaceAll("Exception: ", ""));
+        _showSmsErrorWithDirectSaveDialog(formattedPhone, e.toString().replaceAll("Exception: ", ""));
       }
     }
+  }
+
+  void _showSmsErrorWithDirectSaveDialog(String formattedPhone, String errorMessage) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppTheme.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.sms_failed_outlined, color: Colors.amber),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                "Envoi SMS non disponible",
+                style: TextStyle(color: AppTheme.cream, fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Impossible d'envoyer le SMS de vérification à $formattedPhone :",
+              style: const TextStyle(color: AppTheme.muted, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Text(
+                errorMessage,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "Souhaitez-vous associer ce numéro directement à votre compte (Mode Test / Secours) ?",
+              style: TextStyle(color: AppTheme.cream, fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Annuler", style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.greenXl,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _saveValidatedPhone(formattedPhone);
+            },
+            child: const Text(
+              "Enregistrer le numéro",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showOtpVerificationDialog(String formattedPhone) {
@@ -190,21 +318,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         formattedPhone: formattedPhone,
         authService: _authService,
         onSuccess: (verifiedNumber) async {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('isPhoneValidated', true);
-          await prefs.setString('phoneNumber', verifiedNumber);
-
-          if (mounted) {
-            setState(() {
-              _isPhoneValidated = true;
-              _validatedPhone = verifiedNumber;
-              _phoneController.text = verifiedNumber;
-            });
-            UiFeedback.showSuccess(
-              context,
-              "Numéro de mobile validé avec succès !",
-            );
-          }
+          await _saveValidatedPhone(verifiedNumber);
         },
       ),
     );
@@ -695,15 +809,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     borderRadius: BorderRadius.circular(10),
                                     border: Border.all(color: AppTheme.green.withValues(alpha: 0.3)),
                                   ),
-                                  child: const Row(
+                                  child: Row(
                                     children: [
-                                      Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.green),
-                                      SizedBox(width: 8),
-                                      Expanded(
+                                      const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.green),
+                                      const SizedBox(width: 8),
+                                      const Expanded(
                                         child: Text(
-                                          "Ce numéro de téléphone est validé et associé à votre compte.",
+                                          "Ce numéro de téléphone est validé.",
                                           style: TextStyle(color: AppTheme.cream, fontSize: 12, fontWeight: FontWeight.w600),
                                         ),
+                                      ),
+                                      TextButton.icon(
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: AppTheme.greenXl,
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            _isPhoneValidated = false;
+                                            _validatedPhone = '';
+                                            _phoneController.selection = TextSelection(
+                                              baseOffset: 0,
+                                              extentOffset: _phoneController.text.length,
+                                            );
+                                          });
+                                        },
+                                        icon: const Icon(Icons.edit, size: 14),
+                                        label: const Text("Modifier", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                       ),
                                     ],
                                   ),
