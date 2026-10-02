@@ -5,15 +5,6 @@ import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
-///
-/// Example:
-/// ```dart
-/// import 'firebase_options.dart';
-/// // ...
-/// await Firebase.initializeApp(
-///   options: DefaultFirebaseOptions.currentPlatform,
-/// );
-/// ```
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -47,29 +38,28 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCaAfkg8zLlK8gU42rDJ4zeieZ4xXtXp-k',
-    appId: '1:809394357365:web:60927b7eb4a158e23f643c',
-    messagingSenderId: '809394357365',
-    projectId: 'open-food-app-819c2',
-    authDomain: 'open-food-app-819c2.firebaseapp.com',
-    storageBucket: 'open-food-app-819c2.firebasestorage.app',
+    apiKey: 'AIzaSyA49Q5B4nF8K2OZtDoxUsmELpAb0zZUZbc',
+    appId: '1:178517740611:web:09dfba077107c07f59d8f6',
+    messagingSenderId: '178517740611',
+    projectId: 'app-openfood',
+    authDomain: 'app-openfood.firebaseapp.com',
+    storageBucket: 'app-openfood.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyD6vBCf1iTJFYqJfZ1dZfxYOOEEYu74IZw',
-    appId: '1:809394357365:android:6c3ffc02c4dab6fe3f643c',
-    messagingSenderId: '809394357365',
-    projectId: 'open-food-app-819c2',
-    storageBucket: 'open-food-app-819c2.firebasestorage.app',
+    apiKey: 'AIzaSyB7OZDdwQ98ahlONONb_LZTZjWISEWxGoY',
+    appId: '1:178517740611:android:cfafa8d6ddf9e06759d8f6',
+    messagingSenderId: '178517740611',
+    projectId: 'app-openfood',
+    storageBucket: 'app-openfood.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCaAfkg8zLlK8gU42rDJ4zeieZ4xXtXp-k',
-    appId: '1:809394357365:ios:6c3ffc02c4dab6fe3f643c',
-    messagingSenderId: '809394357365',
-    projectId: 'open-food-app-819c2',
-    storageBucket: 'open-food-app-819c2.firebasestorage.app',
+    apiKey: 'AIzaSyCTJHJNtYBPBNAfo8yhzRnLOmT2nDCJEyE',
+    appId: '1:178517740611:ios:c9f97d98c28246a859d8f6',
+    messagingSenderId: '178517740611',
+    projectId: 'app-openfood',
+    storageBucket: 'app-openfood.firebasestorage.app',
     iosBundleId: 'com.openfood.app',
   );
-
 }
