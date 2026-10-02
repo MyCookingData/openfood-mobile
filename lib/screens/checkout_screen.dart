@@ -113,114 +113,154 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     setState(() => _isProcessing = true);
 
     try {
-      // --- BYPASS POUR WINDOWS ET WEB ---
-      // Stripe natif crashe sur environnement non-mobile
+      // --- BYPASS POUR WINDOWS ET WEB (Environnement non-mobile) ---
       if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.linux) {
-        await Future.delayed(const Duration(seconds: 2)); // Simulation délai bancaire
+        await Future.delayed(const Duration(seconds: 2));
         if (!mounted) return;
-        await OrderService.createOrder(
-          cart,
-          customerPhone: prefs.getString('phoneNumber'),
-          deliveryAddress: cart.isClickAndCollect ? "À emporter" : loc.selectedAddress?.addressName,
-          customerLat: cart.isClickAndCollect ? null : loc.selectedAddress?.latitude,
-          customerLng: cart.isClickAndCollect ? null : loc.selectedAddress?.longitude,
-          stripePaymentIntentId: "pi_mock_123456", // Mock pour tester l'admin
-          promoCodeId: cart.activePromotion?.id,
-          discountAmount: cart.calculateDiscount(),
-        );
-        cart.clearCart();
-        AnalyticsService.logCheckoutFunnel(
-          "checkout_completed", 
-          DateTime.now().difference(_enteredAt).inSeconds,
-          extraData: {"stripe_used": false}
-        );
-        if (!mounted) return;
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const OrderSuccessScreen()));
+        await _finalizeOrder(cart, "pi_mock_desktop_123456");
         return;
       }
-      // ----------------------------------
+      // -----------------------------------------------------------
 
       // Appel API Cloud Function pour créer le PaymentIntent (mode Empreinte)
       final restaurantIdRaw = cart.items.values.first.restaurantId;
-      bool success = false;
-      String? paymentIntentId;
       
-      try {
-        final callable = FirebaseFunctions.instance.httpsCallable('createOrderPaymentIntent');
-        final result = await callable.call({
-          'restaurantId': restaurantIdRaw,
-          'amount': cart.totalFinal,
-        });
-        
-        final intentData = result.data;
-        
-        if (intentData == null || intentData['clientSecret'] == null) {
-          throw Exception("Impossible de créer la transaction sécurisée.");
-        }
-        
-        paymentIntentId = intentData['paymentIntentId'];
-
-        // Initialisation du PaymentSheet native iOS/Android
-        await StripeService.instance.initPaymentSheet(
-          paymentIntentClientSecret: intentData['clientSecret'],
-          customerId: null,
-          setupIntentClientSecret: null,
-        );
-
-        // Affichage de la modale de paiement native !
-        success = await StripeService.instance.presentPaymentSheet();
-      } catch (e) {
-        // En mode MVP / Test, si la fonction n'est pas déployée, on simule un succès
-        if (e.toString().contains('NOT_FOUND') || e.toString().contains('not-found')) {
-          debugPrint("⚠️ Cloud Function non trouvée, simulation du paiement (Mode Test)");
-          await Future.delayed(const Duration(seconds: 1)); // Simuler la modale
-          success = true;
-          paymentIntentId = "pi_test_simulated_${DateTime.now().millisecondsSinceEpoch}";
-        } else {
-          rethrow;
-        }
+      final callable = FirebaseFunctions.instance.httpsCallable('createOrderPaymentIntent');
+      final result = await callable.call({
+        'restaurantId': restaurantIdRaw,
+        'amount': cart.totalFinal,
+      });
+      
+      final intentData = result.data;
+      if (intentData == null || intentData['clientSecret'] == null) {
+        throw Exception("Impossible de créer la transaction sécurisée.");
       }
+      
+      final paymentIntentId = intentData['paymentIntentId'] as String?;
+
+      // Initialisation du PaymentSheet native iOS/Android
+      await StripeService.instance.initPaymentSheet(
+        paymentIntentClientSecret: intentData['clientSecret'],
+        customerId: null,
+        setupIntentClientSecret: null,
+      );
+
+      // Affichage de la modale de paiement native !
+      final success = await StripeService.instance.presentPaymentSheet();
 
       if (success) {
-        // L'utilisateur approuve le paiement sur mobile
         if (!mounted) return;
-        // 1. Enregistrer la vraie commande dans Firebase
-        await OrderService.createOrder(
-          cart,
-          customerPhone: prefs.getString('phoneNumber'),
-          deliveryAddress: cart.isClickAndCollect ? "À emporter" : loc.selectedAddress?.addressName,
-          customerLat: cart.isClickAndCollect ? null : loc.selectedAddress?.latitude,
-          customerLng: cart.isClickAndCollect ? null : loc.selectedAddress?.longitude,
-          stripePaymentIntentId: paymentIntentId,
-          promoCodeId: cart.activePromotion?.id,
-          discountAmount: cart.calculateDiscount(),
-        );
-        
-        // 2. Vider le panier
-        cart.clearCart();
-        
-        AnalyticsService.logCheckoutFunnel(
-          "checkout_completed", 
-          DateTime.now().difference(_enteredAt).inSeconds,
-          extraData: {"stripe_used": true}
-        );
-        
-        if (!mounted) return;
-        // 3. Navigation
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const OrderSuccessScreen()),
-        );
+        await _finalizeOrder(cart, paymentIntentId);
       }
     } catch (e) {
       if (mounted) {
-        UiFeedback.showError(context, e.toString());
+        _showPaymentErrorDialog(context, cart, e.toString());
       }
     } finally {
       if (mounted) {
         setState(() => _isProcessing = false);
       }
     }
+  }
+
+  Future<void> _finalizeOrder(CartProvider cart, String? paymentIntentId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final loc = Provider.of<LocationProvider>(context, listen: false);
+
+    await OrderService.createOrder(
+      cart,
+      customerPhone: prefs.getString('phoneNumber'),
+      deliveryAddress: cart.isClickAndCollect ? "À emporter" : loc.selectedAddress?.addressName,
+      customerLat: cart.isClickAndCollect ? null : loc.selectedAddress?.latitude,
+      customerLng: cart.isClickAndCollect ? null : loc.selectedAddress?.longitude,
+      stripePaymentIntentId: paymentIntentId,
+      promoCodeId: cart.activePromotion?.id,
+      discountAmount: cart.calculateDiscount(),
+    );
+    
+    cart.clearCart();
+    
+    AnalyticsService.logCheckoutFunnel(
+      "checkout_completed", 
+      DateTime.now().difference(_enteredAt).inSeconds,
+      extraData: {"stripe_used": paymentIntentId != null && !paymentIntentId.startsWith("pi_test")}
+    );
+    
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const OrderSuccessScreen()),
+    );
+  }
+
+  void _showPaymentErrorDialog(BuildContext context, CartProvider cart, String error) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppTheme.border)),
+        title: const Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                "Échec du paiement Stripe",
+                style: TextStyle(color: AppTheme.cream, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Le paiement sécurisé n'a pas pu aboutir :",
+              style: TextStyle(color: AppTheme.muted, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Text(
+                error,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontFamily: 'monospace'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              "Voulez-vous annuler ou forcer la validation (mode test/debug) ?",
+              style: TextStyle(color: AppTheme.muted, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Annuler", style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.gold,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _finalizeOrder(cart, "pi_test_manual_${DateTime.now().millisecondsSinceEpoch}");
+            },
+            child: const Text(
+              "[Test] Valider quand même",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _onSelectDelivery(CartProvider cart) async {
