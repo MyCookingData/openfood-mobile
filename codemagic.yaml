@@ -14,13 +14,16 @@ workflows:
           rm -rf openfood-models
           git clone https://github.com/MyCookingData/openfood-models.git openfood-models
           cd $CM_BUILD_DIR
+      - name: Disable Swift Package Manager (Enforce CocoaPods)
+        script: |
+          flutter config --no-enable-swift-package-manager
       - name: Get Flutter packages
         script: |
           flutter packages pub get
       - name: Install CocoaPods
         script: |
           cd ios
-          pod install
+          pod install --repo-update
           cd ..
       - name: Set up code signing on Xcode project
         script: |
