@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:openfood_models/openfood_models.dart';
 import '../services/analytics_service.dart';
+import '../utils/restaurant_helper.dart';
 
 class CartProvider with ChangeNotifier {
   Map<String, CartItem> _items = {};
@@ -19,15 +20,15 @@ class CartProvider with ChangeNotifier {
   double get distanceKm => _distanceKm;
 
   String get restaurantName {
-    if (_restaurantName != null && _restaurantName!.trim().isNotEmpty) {
-      return _restaurantName!;
+    if (_restaurantName != null && _restaurantName!.trim().isNotEmpty && !RestaurantHelper.isRawId(_restaurantName!)) {
+      return RestaurantHelper.cleanRestaurantName(_restaurantName!);
     }
     if (_items.isEmpty) return '';
     final first = _items.values.first;
-    if (first.restaurantName != null && first.restaurantName!.trim().isNotEmpty) {
-      return first.restaurantName!;
+    if (first.restaurantName != null && first.restaurantName!.trim().isNotEmpty && !RestaurantHelper.isRawId(first.restaurantName!)) {
+      return RestaurantHelper.cleanRestaurantName(first.restaurantName!);
     }
-    return first.restaurantId.split(' · ').first;
+    return RestaurantHelper.cleanRestaurantName(first.restaurantId);
   }
 
   void updateLocation(AddressModel? address) {
@@ -89,7 +90,9 @@ class CartProvider with ChangeNotifier {
 
       if (data != null) {
         if (data.containsKey('name') && data['name'] != null && data['name'].toString().isNotEmpty) {
-          _restaurantName = data['name'].toString();
+          final resolvedName = data['name'].toString().trim();
+          _restaurantName = resolvedName;
+          RestaurantHelper.registerRestaurant(restoId, resolvedName);
         }
         if (data.containsKey('lat') && data.containsKey('lng')) {
           double restoLat = (data['lat'] as num).toDouble();
@@ -310,15 +313,16 @@ class CartProvider with ChangeNotifier {
   /// Ajout d'un produit (bloque si restaurantId diffère)
   void addItem(CartItem newItem) {
     if (_items.isNotEmpty) {
-      final currentRestoId = _items.values.first.restaurantId.split(' Â· ').first;
-      final newRestoId = newItem.restaurantId.split(' Â· ').first;
-      if (currentRestoId != newRestoId) {
+      final currentRestoId = _items.values.first.restaurantId.split(' · ').first.trim();
+      final newRestoId = newItem.restaurantId.split(' · ').first.trim();
+      if (currentRestoId.isNotEmpty && newRestoId.isNotEmpty && currentRestoId != newRestoId) {
         throw Exception("DIFF_RESTAURANT"); // Rattrapé par l'UI pour proposer de vider
       }
     }
 
-    if (newItem.restaurantName != null && newItem.restaurantName!.trim().isNotEmpty) {
-      _restaurantName = newItem.restaurantName;
+    if (newItem.restaurantName != null && newItem.restaurantName!.trim().isNotEmpty && !RestaurantHelper.isRawId(newItem.restaurantName!)) {
+      _restaurantName = RestaurantHelper.cleanRestaurantName(newItem.restaurantName!);
+      RestaurantHelper.registerRestaurant(newItem.restaurantId, _restaurantName);
     }
 
     if (_items.containsKey(newItem.id)) {

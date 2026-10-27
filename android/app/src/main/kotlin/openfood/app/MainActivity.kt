@@ -1,4 +1,4 @@
-package com.openfood.app
+package openfood.app
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

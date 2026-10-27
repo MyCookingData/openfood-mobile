@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import 'package:openfood_models/openfood_models.dart';
 import '../utils/cart_handler.dart';
+import '../utils/restaurant_helper.dart';
 
 class UpsellModal extends StatefulWidget {
   final String productName;
@@ -45,7 +46,9 @@ class _UpsellModalState extends State<UpsellModal> {
         priceHT: (_upsells[index]['price'] is double ? _upsells[index]['price'] : (_upsells[index]['price'] as int).toDouble()) / 1.021,
         category: 'Extra',
         restaurantId: widget.restaurantId, 
-        restaurantName: widget.restaurantName,
+        restaurantName: (widget.restaurantName != null && !RestaurantHelper.isRawId(widget.restaurantName!))
+            ? widget.restaurantName
+            : RestaurantHelper.cleanRestaurantName(widget.restaurantId),
       ),
       onSuccess: () {
         Future.delayed(const Duration(milliseconds: 700), () {

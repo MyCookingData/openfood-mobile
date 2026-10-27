@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/restaurant_helper.dart';
 
 class DatabaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -9,6 +10,10 @@ class DatabaseService {
       return snapshot.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
+        final name = (data['name'] ?? '').toString();
+        if (name.isNotEmpty && !RestaurantHelper.isRawId(name)) {
+          RestaurantHelper.registerRestaurant(doc.id, name);
+        }
         return data;
       }).where((data) => data['status'] != 'caché').toList();
     });
@@ -213,13 +218,14 @@ class DatabaseService {
     final docs = validDocs.toList()..shuffle();
     final selectedDoc = docs.first;
 
-    // Le restaurantId est maintenant directement dans le doc "products" et n'est plus un ID de collection parent (voir screenshot BDD)
-    String restaurantName =
-        selectedDoc.data()['restaurantId'] ?? "Restaurant Inconnu";
-
     final data = selectedDoc.data();
     data['id'] = selectedDoc.id;
-    data['restaurantId'] = restaurantName;
+    final rId = (data['restaurantId'] ?? '').toString();
+    final rName = (data['restaurantName'] ?? '').toString();
+    final cleanName = (rName.isNotEmpty && !RestaurantHelper.isRawId(rName))
+        ? rName
+        : RestaurantHelper.cleanRestaurantName(rId);
+    data['restaurantName'] = cleanName;
 
     // Icône dynamique
     String ico = '🍲';

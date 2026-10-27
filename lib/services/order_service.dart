@@ -5,6 +5,7 @@ import 'package:openfood_models/openfood_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/cart_provider.dart';
 import 'stripe_backend_service.dart';
+import '../utils/restaurant_helper.dart';
 
 class OrderService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -25,8 +26,14 @@ class OrderService {
 
       // Extract details
       final firstItem = cart.items.values.first;
-      final restaurantIdRaw = firstItem.restaurantId; // Ex: "Kay Dada · Lamentin"
-      final restaurantName = restaurantIdRaw.split(' · ').first;
+      final restaurantIdRaw = firstItem.restaurantId;
+      String restaurantName = (firstItem.restaurantName != null && firstItem.restaurantName!.isNotEmpty && !RestaurantHelper.isRawId(firstItem.restaurantName!))
+          ? firstItem.restaurantName!
+          : (cart.restaurantName.isNotEmpty && !RestaurantHelper.isRawId(cart.restaurantName) ? cart.restaurantName : '');
+
+      if (restaurantName.isEmpty || RestaurantHelper.isRawId(restaurantName)) {
+        restaurantName = await RestaurantHelper.resolveRestaurantName(restaurantIdRaw, fallback: "Restaurant Partenaire");
+      }
       
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("Utilisateur non connecté !");

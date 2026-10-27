@@ -5,6 +5,7 @@ import '../core/theme.dart';
 import 'package:openfood_models/openfood_models.dart';
 import 'upsell_modal.dart';
 import '../utils/cart_handler.dart';
+import '../utils/restaurant_helper.dart';
 
 class PersoModal extends StatefulWidget {
   final ProductModel product;
@@ -141,7 +142,9 @@ class _PersoModalState extends State<PersoModal> {
         quantity: _qty,
         category: widget.product.category,
         restaurantId: widget.product.restaurantId,
-        restaurantName: widget.product.restaurantName,
+        restaurantName: (widget.product.restaurantName != null && !RestaurantHelper.isRawId(widget.product.restaurantName!))
+            ? widget.product.restaurantName
+            : RestaurantHelper.cleanRestaurantName(widget.product.restaurantId),
         image: widget.product.image,
         selectedOptions: resOptions.isEmpty ? null : resOptions,
       ),
@@ -149,7 +152,10 @@ class _PersoModalState extends State<PersoModal> {
         Navigator.pop(context); // Fermer PersoModal
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted) {
-            UpsellModal.show(context, productName: widget.product.name, restaurantId: widget.product.restaurantId, restaurantName: widget.product.restaurantName);
+            final cleanName = (widget.product.restaurantName != null && !RestaurantHelper.isRawId(widget.product.restaurantName!))
+                ? widget.product.restaurantName
+                : RestaurantHelper.cleanRestaurantName(widget.product.restaurantId);
+            UpsellModal.show(context, productName: widget.product.name, restaurantId: widget.product.restaurantId, restaurantName: cleanName);
           }
         });
       }

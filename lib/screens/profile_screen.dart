@@ -4,6 +4,7 @@ import '../../core/theme.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/location_provider.dart';
 import '../providers/cart_provider.dart';
@@ -232,82 +233,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSendingOtp = false);
-        _showSmsErrorWithDirectSaveDialog(formattedPhone, e.toString().replaceAll("Exception: ", ""));
+        UiFeedback.showError(
+          context,
+          e.toString().replaceAll("Exception: ", ""),
+        );
       }
     }
-  }
-
-  void _showSmsErrorWithDirectSaveDialog(String formattedPhone, String errorMessage) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppTheme.border),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.sms_failed_outlined, color: Colors.amber),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                "Envoi SMS non disponible",
-                style: TextStyle(color: AppTheme.cream, fontSize: 17, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Impossible d'envoyer le SMS de vérification à $formattedPhone :",
-              style: const TextStyle(color: AppTheme.muted, fontSize: 13),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.black26,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: Text(
-                errorMessage,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              "Souhaitez-vous associer ce numéro directement à votre compte (Mode Test / Secours) ?",
-              style: TextStyle(color: AppTheme.cream, fontSize: 13, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Annuler", style: TextStyle(color: Colors.white70)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.greenXl,
-              foregroundColor: Colors.black,
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _saveValidatedPhone(formattedPhone);
-            },
-            child: const Text(
-              "Enregistrer le numéro",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showOtpVerificationDialog(String formattedPhone) {
@@ -558,8 +489,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 24),
 
             // --- Section Localisation ---
-            const Text("CARNET D'ADRESSES",
-                    style: TextStyle(
+            Text("CARNET D'ADRESSES",
+                    style: const TextStyle(
                         color: AppTheme.muted,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -656,8 +587,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         // --- Section Téléphone ---
-                        const Text("SÉCURITÉ & CONTACT",
-                                style: TextStyle(
+                        Text("SÉCURITÉ & CONTACT",
+                                style: const TextStyle(
                                     color: AppTheme.muted,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w800,
@@ -738,6 +669,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         hintStyle: TextStyle(color: AppTheme.muted2.withValues(alpha: 0.5)),
                                         prefixIcon: const Icon(Icons.phone_iphone_rounded,
                                             color: AppTheme.muted2, size: 20),
+                                        suffixIcon: IconButton(
+                                          icon: Icon(
+                                            _isPhoneValidated ? Icons.edit_rounded : Icons.clear_rounded,
+                                            color: AppTheme.muted2,
+                                            size: 18,
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              if (_isPhoneValidated) {
+                                                _isPhoneValidated = false;
+                                                _validatedPhone = '';
+                                              } else {
+                                                _phoneController.clear();
+                                                _isPhoneValidated = false;
+                                                _validatedPhone = '';
+                                                _cooldownSeconds = 0;
+                                              }
+                                            });
+                                          },
+                                        ),
                                         contentPadding:
                                             const EdgeInsets.symmetric(
                                                 horizontal: 16, vertical: 14),
@@ -792,53 +743,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                   onPressed: (_isSendingOtp || _cooldownSeconds > 0) ? null : _validatePhone,
                                 ),
+                                
+
                                 if (_cooldownSeconds > 0) ...[
                                   const SizedBox(height: 6),
                                   Center(
                                     child: Text(
-                                      "Un code a été demandé récemment. Prochain essai dans ${_formatCooldown(_cooldownSeconds)}.",
+                                      "Un code a été demandé récemment pour ce numéro. Prochain essai SMS dans ${_formatCooldown(_cooldownSeconds)}.",
                                       style: const TextStyle(color: AppTheme.muted2, fontSize: 11),
                                     ),
                                   ),
                                 ],
                               ] else ...[
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                   decoration: BoxDecoration(
                                     color: AppTheme.green.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(12),
                                     border: Border.all(color: AppTheme.green.withValues(alpha: 0.3)),
                                   ),
-                                  child: Row(
+                                  child: const Row(
                                     children: [
-                                      const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.green),
-                                      const SizedBox(width: 8),
-                                      const Expanded(
+                                      Icon(Icons.check_circle_rounded, size: 20, color: AppTheme.green),
+                                      SizedBox(width: 10),
+                                      Expanded(
                                         child: Text(
-                                          "Ce numéro de téléphone est validé.",
-                                          style: TextStyle(color: AppTheme.cream, fontSize: 12, fontWeight: FontWeight.w600),
+                                          "Ce numéro de mobile est validé et associé à votre compte.",
+                                          style: TextStyle(color: AppTheme.cream, fontSize: 12.5, fontWeight: FontWeight.w600),
                                         ),
-                                      ),
-                                      TextButton.icon(
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: AppTheme.greenXl,
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        ),
-                                        onPressed: () {
-                                          setState(() {
-                                            _isPhoneValidated = false;
-                                            _validatedPhone = '';
-                                            _phoneController.selection = TextSelection(
-                                              baseOffset: 0,
-                                              extentOffset: _phoneController.text.length,
-                                            );
-                                          });
-                                        },
-                                        icon: const Icon(Icons.edit, size: 14),
-                                        label: const Text("Modifier", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                       ),
                                     ],
                                   ),
+                                ),
+                                const SizedBox(height: 12),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.cream,
+                                    side: BorderSide(color: AppTheme.border2, width: 1.5),
+                                    backgroundColor: AppTheme.surface3,
+                                    minimumSize: const Size(double.infinity, 46),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  icon: const Icon(Icons.edit_rounded, size: 18, color: AppTheme.greenXl),
+                                  label: const Text(
+                                    "Modifier / Changer ce numéro",
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isPhoneValidated = false;
+                                      _validatedPhone = '';
+                                      _cooldownSeconds = 0;
+                                    });
+                                  },
                                 ),
                               ],
                             ],
@@ -923,8 +880,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 32),
 
             // --- Section Informations Légales & CGU ---
-            const Text("⚖️ INFORMATIONS LÉGALES & CGU",
-                    style: TextStyle(
+            Text("⚖️ INFORMATIONS LÉGALES & CGU",
+                    style: const TextStyle(
                         color: AppTheme.muted,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,

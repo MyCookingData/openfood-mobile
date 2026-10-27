@@ -13,6 +13,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'screens/search_modal.dart';
 import 'widgets/perso_modal.dart';
 import 'services/analytics_service.dart';
+import 'utils/restaurant_helper.dart';
 
 import 'screens/profile_screen.dart';
 import 'widgets/address_selector_modal.dart';
@@ -386,13 +387,18 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: snapshot.data!.docs.map((doc) {
                             final data = doc.data() as Map<String, dynamic>;
                             data['id'] = doc.id;
+                            final rId = (data['restaurantId'] ?? '').toString();
+                            if (data['restaurantName'] == null || data['restaurantName'].toString().trim().isEmpty || RestaurantHelper.isRawId(data['restaurantName'].toString())) {
+                              data['restaurantName'] = RestaurantHelper.cleanRestaurantName(rId);
+                            }
                             final product = ProductModel.fromJson(data);
+                            final displayRestoName = RestaurantHelper.cleanRestaurantName(product.restaurantName ?? rId);
                             
                             return JuicyWrapper(
                               onTap: product.isAvailable ? () => PersoModal.show(context, product: product, emoji: "") : () {},
                               child: DishCard(
                                 title: product.name,
-                                restaurant: product.restaurantName ?? product.restaurantId,
+                                restaurant: displayRestoName,
                                 price: product.priceHT * (1 + product.vatRate / 100),
                                 emoji: "",
                                 badgeText: product.badgeText.isNotEmpty ? product.badgeText : "NOUVEAU",
@@ -546,7 +552,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
                             return JuicyWrapper(
                               onTap: isAvailable ? () {
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => RestoScreen(restaurantName: restoData['name'] ?? 'Restaurant inconnu')));
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => RestoScreen(
+                                  restaurantName: restoData['name'] ?? 'Restaurant inconnu',
+                                  restaurantId: restoData['id'] ?? '',
+                                )));
                               } : () {},
                               child: card,
                             ).animate().fade().slideY(begin: 0.1);

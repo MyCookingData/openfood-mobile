@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
 import '../../utils/ui_feedback.dart';
@@ -166,7 +166,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } catch (e) {
       if (mounted) {
-        UiFeedback.showError(context, e.toString());
+        String msg = e.toString().replaceFirst('Exception: ', '').trim();
+        if (msg.contains('email-already-in-use')) {
+          msg = "Cette adresse e-mail est déjà associée à un compte. Veuillez vous connecter.";
+        }
+        UiFeedback.showError(context, msg);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

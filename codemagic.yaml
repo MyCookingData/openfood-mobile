@@ -1,0 +1,41 @@
+workflows:
+  ios-release:
+    name: OpenFood iOS Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Fetch openfood-models dependency
+        script: |
+          cd ..
+          rm -rf openfood-models
+          git clone https://github.com/MyCookingData/openfood-models.git openfood-models
+          cd $CM_BUILD_DIR
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Install CocoaPods
+        script: |
+          cd ios
+          pod install
+          cd ..
+      - name: Set up code signing on Xcode project
+        script: |
+          xcode-project use-profiles || echo "No custom profiles found, proceeding with default settings"
+      - name: Build iOS App (IPA)
+        script: |
+          flutter build ipa --release || flutter build ipa --release --no-codesign
+    artifacts:
+      - build/ios/archive/Runner.xcarchive
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - contact@cookingdata.fr
+        notify:
+          success: true
+          failure: true

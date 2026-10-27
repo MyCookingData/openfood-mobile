@@ -9,6 +9,7 @@ import 'screens/profile_screen.dart';
 import 'screens/orders_screen.dart';
 import 'screens/search_modal.dart';
 import 'services/notification_service.dart';
+import 'services/app_version_service.dart';
 import 'services/analytics_service.dart';
 
 class MainWrapper extends StatefulWidget {
@@ -30,6 +31,11 @@ class _MainWrapperState extends State<MainWrapper> {
     // Initialiser les notifications locales et démarrer l'écoute des statuts
     NotificationService.instance.initialize().then((_) {
       NotificationService.instance.startListeningToOrders();
+    });
+
+    // Vérification de la version de l'application (Mise à jour requise / Forçage Store)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppVersionService.checkVersion(context);
     });
   }
 

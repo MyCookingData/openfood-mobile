@@ -1,10 +1,9 @@
+import 'restaurant_helper.dart';
+
 extension StringFormatting on String {
-  /// Transforms an ID like "open_food · 30 min" or "open_food" to "Open Food"
+  /// Transforme un ID, un slug ou un nom en affichage propre et lisible pour le client.
+  /// Protège rigoureusement contre l'affichage de hash ou identifiants techniques bruts.
   String get formattedRestaurantName {
-    final base = split(' · ').first.replaceAll('_', ' ');
-    return base
-        .split(' ')
-        .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '')
-        .join(' ');
+    return RestaurantHelper.cleanRestaurantName(this);
   }
 }

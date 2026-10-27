@@ -15,6 +15,7 @@ import '../../widgets/banner_card.dart';
 import '../../services/carousel_service.dart';
 import '../cart_screen.dart';
 import 'widgets/hero_slider.dart';
+import '../../utils/restaurant_helper.dart';
 
 class RestoScreen extends StatefulWidget {
   final String restaurantName;
@@ -254,7 +255,8 @@ class _RestoScreenState extends State<RestoScreen> {
                 return Center(child: Text("Erreur : ${restoSnap.error}", style: const TextStyle(color: AppTheme.redL)));
               }
 
-              String restaurantId = widget.restaurantName;
+              String restaurantId = widget.restaurantId ?? widget.restaurantName;
+              String actualRestoName = widget.restaurantName;
               String restoZone = "";
               String restoImage = "";
               String restoType = "";
@@ -263,11 +265,15 @@ class _RestoScreenState extends State<RestoScreen> {
                 final doc = restoSnap.data!.docs.first;
                 restaurantId = doc.id;
                 final rd = doc.data() as Map<String, dynamic>;
+                if (rd['name'] != null && rd['name'].toString().trim().isNotEmpty && !RestaurantHelper.isRawId(rd['name'].toString())) {
+                  actualRestoName = rd['name'].toString().trim();
+                }
                 restoZone = (rd['zone'] ?? rd['address'] ?? "").toString();
                 restoImage = (rd['imageUrl'] ?? rd['image'] ?? rd['coverImage'] ?? rd['photo'] ?? "").toString();
                 restoType = (rd['type'] ?? "").toString();
                 restoRating = (rd['rating'] as num?)?.toDouble();
               }
+              RestaurantHelper.registerRestaurant(restaurantId, actualRestoName);
 
               return StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
@@ -350,6 +356,10 @@ class _RestoScreenState extends State<RestoScreen> {
                       children: bestsellers.map((doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         data['id'] = doc.id;
+                        data['restaurantId'] = restaurantId;
+                        if (data['restaurantName'] == null || data['restaurantName'].toString().trim().isEmpty || RestaurantHelper.isRawId(data['restaurantName'].toString())) {
+                          data['restaurantName'] = actualRestoName;
+                        }
                         final product = ProductModel.fromJson(data);
                         
                         return BestsellerCard(
@@ -393,6 +403,10 @@ class _RestoScreenState extends State<RestoScreen> {
                       children: items.map((doc) {
                         final data = doc.data() as Map<String, dynamic>;
                         data['id'] = doc.id;
+                        data['restaurantId'] = restaurantId;
+                        if (data['restaurantName'] == null || data['restaurantName'].toString().trim().isEmpty || RestaurantHelper.isRawId(data['restaurantName'].toString())) {
+                          data['restaurantName'] = actualRestoName;
+                        }
                         final product = ProductModel.fromJson(data);
                         
                         return ProductTile(

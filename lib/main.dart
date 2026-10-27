@@ -40,8 +40,7 @@ void main() async {
   if (!kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS)) {
-    // TODO (PRODUCTION): Remplacer la clé ci-dessous par votre clé PUBLIQUE de production Stripe (pk_live_...)
-    Stripe.publishableKey = 'pk_test_51PWey5AQoI9u5VYqxFtORW8o57ByrPHgAAATtKE8udaQ35A1kDzi5BJdfi79FmiorDHD9fWMOmbxfAWHcuiYCybK00X8F5XKnE';
+    Stripe.publishableKey = 'pk_live_51PWey5AQoI9u5VYq76MJL8yblUFDi4zRUEaBa33FyQB0yOKCxnEJmdQJSCft39OnogYrFmMYoBb4sQ7PCzR85YuU00G0Xf7zc1';
   }
 
   runApp(

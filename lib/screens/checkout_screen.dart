@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +10,9 @@ import '../../providers/location_provider.dart';
 import '../../services/stripe_service.dart';
 import '../../services/order_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/services.dart';
 import 'order_success_screen.dart';
@@ -122,25 +127,63 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
       // -----------------------------------------------------------
 
-      // Appel API Cloud Function pour créer le PaymentIntent (mode Empreinte)
+      // Appel API Backend OpenFood Stripe (mode Empreinte)
       final restaurantIdRaw = cart.items.values.first.restaurantId;
-      
-      final callable = FirebaseFunctions.instance.httpsCallable('createOrderPaymentIntent');
-      final result = await callable.call({
-        'restaurantId': restaurantIdRaw,
-        'amount': cart.totalFinal,
-      });
-      
-      final intentData = result.data;
-      if (intentData == null || intentData['clientSecret'] == null) {
-        throw Exception("Impossible de créer la transaction sécurisée.");
+      final user = AuthService().currentUser;
+
+      String? clientSecret;
+      String? paymentIntentId;
+
+      try {
+        final response = await http.post(
+          Uri.parse('https://openfood.fr/api/create_payment_intent.php'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'restaurantId': restaurantIdRaw,
+            'amount': cart.totalFinal,
+            'userId': user?.uid ?? 'anonymous',
+          }),
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['success'] == true) {
+            clientSecret = data['clientSecret'];
+            paymentIntentId = data['paymentIntentId'];
+          } else {
+            throw Exception(data['error'] ?? "Erreur lors de la création du paiement.");
+          }
+        } else {
+          final data = jsonDecode(response.body);
+          throw Exception(data['error'] ?? "Erreur serveur HTTP ${response.statusCode}");
+        }
+      } catch (apiError) {
+        // Fallback optionnel Cloud Function
+        try {
+          final callable = FirebaseFunctions.instance.httpsCallable('createOrderPaymentIntent');
+          final result = await callable.call({
+            'restaurantId': restaurantIdRaw,
+            'amount': cart.totalFinal,
+          });
+          final intentData = result.data;
+          if (intentData != null && intentData['clientSecret'] != null) {
+            clientSecret = intentData['clientSecret'];
+            paymentIntentId = intentData['paymentIntentId'];
+          } else {
+            throw apiError;
+          }
+        } catch (_) {
+          rethrow;
+        }
       }
-      
-      final paymentIntentId = intentData['paymentIntentId'] as String?;
+
+      if (clientSecret == null || clientSecret.isEmpty) {
+        throw Exception("Impossible de créer la transaction sécurisée Stripe.");
+      }
 
       // Initialisation du PaymentSheet native iOS/Android
       await StripeService.instance.initPaymentSheet(
-        paymentIntentClientSecret: intentData['clientSecret'],
+        paymentIntentClientSecret: clientSecret!,
         customerId: null,
         setupIntentClientSecret: null,
       );
@@ -193,19 +236,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  void _showPaymentErrorDialog(BuildContext context, CartProvider cart, String error) {
+    void _showPaymentErrorDialog(BuildContext context, CartProvider cart, String error) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: AppTheme.border)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: AppTheme.border)),
         title: const Row(
           children: [
-            Icon(Icons.error_outline, color: Colors.redAccent),
-            SizedBox(width: 8),
+            Icon(Icons.error_outline_rounded, color: AppTheme.redL, size: 24),
+            SizedBox(width: 10),
             Expanded(
               child: Text(
-                "Échec du paiement Stripe",
+                "Échec du paiement",
                 style: TextStyle(color: AppTheme.cream, fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
@@ -216,51 +259,107 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              "Le paiement sécurisé n'a pas pu aboutir :",
-              style: TextStyle(color: AppTheme.muted, fontSize: 14),
+              "Une erreur est survenue lors du paiement :",
+              style: TextStyle(color: AppTheme.muted, fontSize: 13.5),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.all(10),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.black26,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white10),
+                color: Colors.black38,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white12),
               ),
-              child: Text(
+              child: SelectableText(
                 error,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontFamily: 'monospace'),
+                style: const TextStyle(color: AppTheme.redL, fontSize: 12, fontFamily: 'monospace'),
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
-              "Voulez-vous annuler ou forcer la validation (mode test/debug) ?",
-              style: TextStyle(color: AppTheme.muted, fontSize: 13),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.cream,
+                side: BorderSide(color: AppTheme.border2),
+                minimumSize: const Size(double.infinity, 40),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.copy_rounded, size: 16, color: AppTheme.greenXl),
+              label: const Text("Copier l'erreur", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: error));
+                UiFeedback.showSuccess(context, "Détail de l'erreur copié dans le presse-papier !");
+              },
             ),
           ],
         ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text("Annuler", style: TextStyle(color: Colors.white70)),
+            child: const Text("Fermer", style: TextStyle(color: AppTheme.muted)),
           ),
-          ElevatedButton(
+          ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.gold,
+              backgroundColor: AppTheme.greenXl,
               foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
+            icon: const Icon(Icons.send_rounded, size: 16, color: Colors.black),
+            label: const Text("Envoyer votre rapport", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             onPressed: () async {
               Navigator.pop(ctx);
-              await _finalizeOrder(cart, "pi_test_manual_${DateTime.now().millisecondsSinceEpoch}");
+              await _sendErrorReport(error, cart);
             },
-            child: const Text(
-              "[Test] Valider quand même",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _sendErrorReport(String error, CartProvider cart) async {
+    final user = FirebaseAuth.instance.currentUser;
+    const techEmail = "contact@cookingdata.fr";
+    
+    // 1. Enregistrement Firestore pour audit technique
+    try {
+      await FirebaseFirestore.instance.collection('error_reports').add({
+        'type': 'stripe_payment_error',
+        'error': error,
+        'userEmail': user?.email ?? 'Anonyme',
+        'userId': user?.uid ?? 'non_connecte',
+        'restaurantId': cart.items.values.isNotEmpty ? cart.items.values.first.restaurantId : null,
+        'restaurantName': cart.restaurantName,
+        'totalAmount': cart.totalFinal,
+        'platform': defaultTargetPlatform.toString(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
+
+    // 2. Envoi par mail technique
+    try {
+      final subject = Uri.encodeComponent("[Rapport Incident OpenFood] Erreur Paiement Stripe");
+      final emailText = "Bonjour,\n\nVoici le rapport d'incident lors du paiement Stripe :\n\n"
+          "• Erreur : $error\n"
+          "• Montant : ${cart.totalFinal.toStringAsFixed(2)} €\n"
+          "• Restaurant : ${cart.restaurantName}\n"
+          "• Utilisateur : ${user?.email ?? 'Non renseigné'} (UID: ${user?.uid ?? 'N/A'})\n"
+          "• Date : ${DateTime.now().toIso8601String()}\n\n"
+          "Merci pour l'assistance technique.";
+      final body = Uri.encodeComponent(emailText);
+      final mailUrl = Uri.parse("mailto:$techEmail?subject=$subject&body=$body");
+      if (await canLaunchUrl(mailUrl)) {
+        await launchUrl(mailUrl);
+      }
+    } catch (_) {}
+
+    if (mounted) {
+      UiFeedback.showSuccess(
+        context,
+        "Votre rapport d'incident a été transmis avec succès à l'équipe technique.",
+        duration: const Duration(seconds: 5),
+      );
+    }
   }
 
   Future<void> _onSelectDelivery(CartProvider cart) async {

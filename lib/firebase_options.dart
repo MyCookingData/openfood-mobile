@@ -60,6 +60,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '809394357365',
     projectId: 'open-food-app-819c2',
     storageBucket: 'open-food-app-819c2.firebasestorage.app',
-    iosBundleId: 'com.openfood.app',
+    iosBundleId: 'openfood.app',
   );
 }

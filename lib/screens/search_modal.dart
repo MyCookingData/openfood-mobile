@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../core/theme.dart';
-import '../utils/string_extensions.dart';
 import 'resto/resto_screen.dart';
 import '../services/analytics_service.dart';
+import '../utils/restaurant_helper.dart';
 
 class SearchModal extends StatefulWidget {
   const SearchModal({super.key});
@@ -146,7 +146,11 @@ class _SearchModalState extends State<SearchModal> {
           itemBuilder: (context, index) {
             final doc = results[index].data() as Map<String, dynamic>;
             final title = doc['name'] ?? 'Inconnu';
-            final resto = doc['restaurantId'] ?? '';
+            final restoId = (doc['restaurantId'] ?? '').toString();
+            final rawRestoName = (doc['restaurantName'] ?? '').toString();
+            final displayRestoName = (rawRestoName.isNotEmpty && !RestaurantHelper.isRawId(rawRestoName))
+                ? rawRestoName
+                : RestaurantHelper.cleanRestaurantName(restoId);
             final priceHT = (doc['priceHT'] as num?)?.toDouble() ?? 10.0;
             final vatRate = (doc['vatRate'] as num?)?.toDouble() ?? 2.1;
             final priceTTC = priceHT * (1 + vatRate / 100);
@@ -163,18 +167,21 @@ class _SearchModalState extends State<SearchModal> {
                 child: const Center(child: Text("🍽️", style: TextStyle(fontSize: 20))),
               ),
               title: Text(title, style: AppTheme.titleStyle.copyWith(fontSize: 15)),
-              subtitle: Text(resto.formattedRestaurantName, style: const TextStyle(color: AppTheme.greenXl, fontSize: 13, fontWeight: FontWeight.w600)),
+              subtitle: Text(displayRestoName, style: const TextStyle(color: AppTheme.greenXl, fontSize: 13, fontWeight: FontWeight.w600)),
               trailing: Text("${priceTTC.toStringAsFixed(2).replaceAll('.', ',')}€", style: AppTheme.titleStyle.copyWith(fontSize: 14)),
               onTap: () {
                 AnalyticsService.logSearch(_query);
                 AnalyticsService.logEvent(
                   eventType: "search",
                   eventAction: "result_clicked",
-                  eventData: {"title": title, "restaurant": resto},
+                  eventData: {"title": title, "restaurant": displayRestoName},
                 );
-                // Navegate to the restaurant passing the exact name so RestoScreen dynamically filters
+                // Navigate to the restaurant passing clean name and ID
                 Navigator.pop(context); // close modal
-                Navigator.push(context, MaterialPageRoute(builder: (_) => RestoScreen(restaurantName: resto)));
+                Navigator.push(context, MaterialPageRoute(builder: (_) => RestoScreen(
+                  restaurantName: displayRestoName,
+                  restaurantId: restoId,
+                )));
               },
             ).animate().fade(duration: 300.ms, delay: (index * 50).ms).slideX(begin: 0.1, curve: Curves.easeOut);
           },

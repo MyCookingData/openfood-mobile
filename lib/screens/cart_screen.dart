@@ -106,12 +106,7 @@ class _CartScreenState extends State<CartScreen> {
                             const Text("📍 Commande chez", style: TextStyle(color: AppTheme.muted2, fontSize: 13, fontWeight: FontWeight.w600)),
                             const Spacer(),
                             Text(
-                              (items.first.restaurantName ?? items.first.restaurantId)
-                                  .split(' · ').first
-                                  .replaceAll('_', ' ')
-                                  .split(' ')
-                                  .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}' : '')
-                                  .join(' '), 
+                              cart.restaurantName, 
                               style: const TextStyle(color: AppTheme.cream, fontSize: 14, fontWeight: FontWeight.bold)
                             ),
                           ],

@@ -6,6 +6,7 @@ import '../core/theme.dart';
 import '../widgets/dish_card.dart';
 import '../widgets/perso_modal.dart';
 import 'search_modal.dart';
+import '../utils/restaurant_helper.dart';
 
 class ExplorerScreen extends StatelessWidget {
   final String category;
@@ -84,7 +85,12 @@ class ExplorerScreen extends StatelessWidget {
               final doc = docs[index];
               final data = doc.data() as Map<String, dynamic>;
               data['id'] = doc.id;
+              final rId = (data['restaurantId'] ?? '').toString();
+              if (data['restaurantName'] == null || data['restaurantName'].toString().trim().isEmpty || RestaurantHelper.isRawId(data['restaurantName'].toString())) {
+                data['restaurantName'] = RestaurantHelper.cleanRestaurantName(rId);
+              }
               final product = ProductModel.fromJson(data);
+              final displayResto = RestaurantHelper.cleanRestaurantName(product.restaurantName ?? rId);
               final priceTTC = product.priceHT * (1 + product.vatRate / 100);
 
               return GestureDetector(
@@ -97,7 +103,7 @@ class ExplorerScreen extends StatelessWidget {
                 } : () {},
                 child: DishCard(
                   title: product.name,
-                  restaurant: product.restaurantName ?? product.restaurantId,
+                  restaurant: displayResto,
                   price: priceTTC,
                   emoji: "",
                   badgeText: "NOUVEAU",

@@ -9,6 +9,25 @@
       "client_info": {
         "mobilesdk_app_id": "1:809394357365:android:6c3ffc02c4dab6fe3f643c",
         "android_client_info": {
+          "package_name": "openfood.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6vBCf1iTJFYqJfZ1dZfxYOOEEYu74IZw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:809394357365:android:6c3ffc02c4dab6fe3f643c",
+        "android_client_info": {
           "package_name": "com.openfood.app"
         }
       },
