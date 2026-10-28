@@ -3,10 +3,15 @@ workflows:
     name: OpenFood iOS Release
     max_build_duration: 60
     instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: "Codemagic CI"
     environment:
       flutter: stable
       xcode: latest
       cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: openfood.app
     scripts:
       - name: Fetch openfood-models dependency
         script: |
@@ -27,15 +32,18 @@ workflows:
           cd ..
       - name: Set up code signing on Xcode project
         script: |
-          xcode-project use-profiles || echo "No custom profiles found, proceeding with default settings"
+          xcode-project use-profiles
       - name: Build iOS App (IPA)
         script: |
-          flutter build ipa --release || flutter build ipa --release --no-codesign
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
     artifacts:
-      - build/ios/archive/Runner.xcarchive
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
     publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
       email:
         recipients:
           - contact@cookingdata.fr
