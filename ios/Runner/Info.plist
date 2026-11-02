@@ -30,6 +30,12 @@
 	<string>OpenFood utilise votre position pour localiser les restaurants partenaires à proximité et calculer les frais de livraison.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Votre position est nécessaire pour assurer le suivi en temps réel de votre commande et faciliter la livraison.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>OpenFood peut utiliser l appareil photo pour vous permettre de scanner votre carte de paiement ou prendre une photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>OpenFood necessite l acces a votre galerie photo pour ajouter des justificatifs ou photos de profil.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
