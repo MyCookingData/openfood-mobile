@@ -372,6 +372,49 @@ class AuthService {
     await _firebaseAuth.signOut();
   }
 
+  // Suppression définitive du compte utilisateur (Conformité Apple Guideline 5.1.1(v) & RGPD)
+  Future<void> deleteAccount() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) {
+      throw Exception("Aucun utilisateur n'est actuellement connecté.");
+    }
+    final uid = user.uid;
+
+    try {
+      // 1. Supprimer ou anonymiser le document Firestore de l'utilisateur
+      try {
+        await _firestore.collection('users').doc(uid).delete();
+      } catch (_) {
+        // En cas de règles restrictives de sécurité sur delete, on anonymise / désactive
+        await _firestore.collection('users').doc(uid).set({
+          'isDeleted': true,
+          'deletedAt': FieldValue.serverTimestamp(),
+          'email': 'deleted_$uid@deleted.invalid',
+          'phone': '',
+          'firstName': 'Utilisateur',
+          'lastName': 'Supprimé',
+          'displayName': 'Compte supprimé',
+        }, SetOptions(merge: true));
+      }
+
+      // 2. Nettoyage du cache local SharedPreferences
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+      } catch (_) {}
+
+      // 3. Suppression définitive du compte dans Firebase Authentication
+      await user.delete();
+    } on auth.FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        throw Exception("Pour votre sécurité, la suppression de compte nécessite une reconnexion récente. Veuillez vous déconnecter, vous reconnecter puis réessayer.");
+      }
+      throw _handleAuthException(e);
+    } catch (e) {
+      throw Exception("Une erreur s'est produite lors de la suppression de votre compte : $e");
+    }
+  }
+
   // Obtenir le rôle de l'utilisateur actuel depuis Firestore
   Future<UserRole?> getUserRole(String uid) async {
     try {

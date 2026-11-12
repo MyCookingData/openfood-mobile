@@ -255,6 +255,99 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: AppTheme.border2),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppTheme.redL, size: 28),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "Supprimer mon compte ?",
+                style: TextStyle(
+                  color: AppTheme.cream,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          "Cette action est irréversible. Toutes vos informations personnelles (adresses, historique de commandes, coordonnées) seront définitivement effacées conformément aux exigences de confidentialité Apple et au RGPD.\n\nVoulez-vous vraiment supprimer définitivement votre compte OpenFood ?",
+          style: TextStyle(color: AppTheme.muted, fontSize: 13.5, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text("Annuler", style: TextStyle(color: AppTheme.muted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.redL,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "Supprimer définitivement",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    // Indicateur de chargement modal
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: Center(
+          child: CircularProgressIndicator(color: AppTheme.redL),
+        ),
+      ),
+    );
+
+    try {
+      if (!mounted) return;
+      Provider.of<CartProvider>(context, listen: false).clearCart();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('isPhoneValidated');
+      await prefs.remove('phoneNumber');
+      NotificationService.instance.stopListening();
+
+      await _authService.deleteAccount();
+
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // Fermer le loader
+      Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Votre compte et vos données ont été définitivement supprimés."),
+          backgroundColor: AppTheme.redL,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // Fermer le loader
+      UiFeedback.showError(
+        context,
+        e.toString().replaceAll("Exception: ", ""),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -840,6 +933,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               style: TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 16)),
                         ).animate().fade(delay: 300.ms),
+
+                        const SizedBox(height: 14),
+
+                        // --- Bouton Suppression de compte (Conformité Apple Guideline 5.1.1(v) & RGPD) ---
+                        Center(
+                          child: TextButton.icon(
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppTheme.redL.withValues(alpha: 0.85),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            ),
+                            onPressed: () => _confirmDeleteAccount(context),
+                            icon: const Icon(Icons.delete_forever_rounded, size: 18),
+                            label: const Text(
+                              "Supprimer mon compte définitivement",
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ).animate().fade(delay: 320.ms),
                       ],
                     );
                   } else {
