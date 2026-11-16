@@ -44,6 +44,8 @@ class RestaurantCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool hasImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -69,11 +71,11 @@ class RestaurantCard extends StatelessWidget {
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
                 ),
               ),
-              if (imageUrl != null)
+              if (hasImage)
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
                   child: CachedNetworkImage(
-                    imageUrl: imageUrl!,
+                    imageUrl: imageUrl!.trim(),
                     height: 148,
                     width: double.infinity,
                     fit: BoxFit.cover,
@@ -84,26 +86,35 @@ class RestaurantCard extends StatelessWidget {
                       ),
                     ),
                     errorWidget: (context, url, error) => const Center(
-                      child: Icon(Icons.fastfood, color: AppTheme.muted2, size: 40),
+                      child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 40),
                     ),
                   ),
                 ),
-              // Overlay sombre par-dessus l'image
-              if (imageUrl != null)
+              // Gradient subtil pour la lisibilité des badges si image présente
+              if (hasImage)
                 Container(
                   height: 148,
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.3),
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.45),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: const [0.5, 1.0],
+                    ),
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
                   ),
                 ),
-              // L'emoji parfaitement centré
-              SizedBox(
-                height: 148,
-                child: Center(
-                  child: Text(emoji, style: const TextStyle(fontSize: 66)),
+              // N'afficher l'assiette/emoji QUE si aucune image n'a été choisie sur admin/restaurateur !
+              if (!hasImage && emoji.trim().isNotEmpty)
+                SizedBox(
+                  height: 148,
+                  child: Center(
+                    child: Text(emoji, style: const TextStyle(fontSize: 66)),
+                  ),
                 ),
-              ),
               if (ordersBadge.isNotEmpty)
                 Positioned(
                   top: 10,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../core/theme.dart';
 import 'resto/resto_screen.dart';
 import '../services/analytics_service.dart';
@@ -155,6 +156,8 @@ class _SearchModalState extends State<SearchModal> {
             final vatRate = (doc['vatRate'] as num?)?.toDouble() ?? 2.1;
             final priceTTC = priceHT * (1 + vatRate / 100);
 
+            final dishImg = (doc['image'] ?? doc['imageUrl'] ?? doc['photo'] ?? '').toString().trim();
+
             return ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Container(
@@ -164,7 +167,27 @@ class _SearchModalState extends State<SearchModal> {
                   color: AppTheme.surface2,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Center(child: Text("🍽️", style: TextStyle(fontSize: 20))),
+                child: dishImg.isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: CachedNetworkImage(
+                          imageUrl: dishImg,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => const Center(
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.greenXl),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => const Center(
+                            child: Icon(Icons.restaurant, color: AppTheme.muted2, size: 24),
+                          ),
+                        ),
+                      )
+                    : const Center(child: Text("🍽️", style: TextStyle(fontSize: 20))),
               ),
               title: Text(title, style: AppTheme.titleStyle.copyWith(fontSize: 15)),
               subtitle: Text(displayRestoName, style: const TextStyle(color: AppTheme.greenXl, fontSize: 13, fontWeight: FontWeight.w600)),

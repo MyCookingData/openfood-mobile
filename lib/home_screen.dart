@@ -531,9 +531,12 @@ class _HomeScreenState extends State<HomeScreen> {
                             String deliveryStr = isAvailable ? "${deliveryFeeNum.toStringAsFixed(2).replaceAll('.', ',')}€" : "Indisponible";
                             String distStr = distanceKm > 0 ? "${distanceKm.toStringAsFixed(1)} km" : (restoData['zone'] ?? "À proximité");
 
+                            final String restoImg = (restoData['imageUrl'] ?? restoData['image'] ?? restoData['coverImage'] ?? restoData['photoUrl'] ?? '').toString().trim();
+                            final bool hasImage = restoImg.isNotEmpty;
+
                             Widget card = RestaurantCard(
                               name: restoData['name'] ?? 'Restaurant inconnu',
-                              emoji: "🍽️",
+                              emoji: hasImage ? "" : "🍽️",
                               status: isAvailable ? "Ouvert" : "Trop loin",
                               rating: restoData['rating']?.toString() ?? "N/A",
                               reviews: "Nouveau",
@@ -542,7 +545,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               deliveryTime: isAvailable ? "30 min" : "-",
                               distance: distStr,
                               priceInfo: "Plats dès 10€",
-                              imageUrl: restoData['imageUrl'],
+                              imageUrl: hasImage ? restoImg : null,
                               imageGradient: const [Color(0xFF071408), Color(0xFF0F2A16), Color(0xFF1A5030)],
                             );
                             
