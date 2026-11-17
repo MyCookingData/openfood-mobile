@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:openfood_mobile/utils/opening_hours_helper.dart';
+import 'package:openfood_models/openfood_models.dart';
 
 void main() {
   group('OpeningHoursHelper Tests', () {
@@ -54,6 +54,41 @@ void main() {
       final status = OpeningHoursHelper.getStatus(hours, manualStatus: 'inactif', now: dt);
       expect(status.isOpen, isFalse);
       expect(status.detailStatus, contains('Fermé'));
+    });
+  });
+
+  group('Restaurant startingPrice Tests', () {
+    test('RestaurantModel correctly deserializes numeric startingPrice', () {
+      final json = {
+        'id': 'resto_1',
+        'name': 'Test Resto',
+        'imageUrl': '',
+        'startingPrice': 8.5,
+      };
+      final resto = RestaurantModel.fromJson(json);
+      expect(resto.startingPrice, 8.5);
+    });
+
+    test('RestaurantModel correctly deserializes string startingPrice', () {
+      final json = {
+        'id': 'resto_2',
+        'name': 'Test Resto 2',
+        'imageUrl': '',
+        'startingPrice': '12,50 €',
+      };
+      final resto = RestaurantModel.fromJson(json);
+      expect(resto.startingPrice, 12.5);
+    });
+
+    test('RestaurantModel correctly serializes startingPrice', () {
+      final resto = RestaurantModel(
+        id: 'resto_3',
+        name: 'Test Resto 3',
+        imageUrl: '',
+        startingPrice: 9.0,
+      );
+      final json = resto.toJson();
+      expect(json['startingPrice'], 9.0);
     });
   });
 }

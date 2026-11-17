@@ -243,7 +243,7 @@ class RestaurantCard extends StatelessWidget {
               children: [
                 const Text("À partir de", style: TextStyle(color: AppTheme.muted, fontSize: 11)),
                 Text(
-                  priceInfo,
+                  priceInfo.replaceAll(RegExp(r'^(Plats dès|Dès|À partir de)\s*', caseSensitive: false), ''),
                   style: const TextStyle(color: AppTheme.greenXl, fontWeight: FontWeight.w700, fontSize: 12),
                 ),
               ],

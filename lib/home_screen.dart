@@ -551,6 +551,26 @@ class _HomeScreenState extends State<HomeScreen> {
                               cardStatusColor = 'red';
                             }
 
+                            final rawStartingPrice = restoData['startingPrice'] ?? restoData['minProductPrice'] ?? restoData['minPrice'];
+                            double? startingPriceNum;
+                            if (rawStartingPrice is num) {
+                              startingPriceNum = rawStartingPrice.toDouble();
+                            } else if (rawStartingPrice is String) {
+                              final cleaned = rawStartingPrice.replaceAll('€', '').replaceAll(' ', '').replaceAll(',', '.').trim();
+                              startingPriceNum = double.tryParse(cleaned);
+                            }
+
+                            String priceInfoStr;
+                            if (startingPriceNum != null && startingPriceNum > 0) {
+                              if (startingPriceNum % 1 == 0) {
+                                priceInfoStr = "${startingPriceNum.toInt()} €";
+                              } else {
+                                priceInfoStr = "${startingPriceNum.toStringAsFixed(2).replaceAll('.', ',')} €";
+                              }
+                            } else {
+                              priceInfoStr = "10 €";
+                            }
+
                             Widget card = RestaurantCard(
                               name: restoData['name'] ?? 'Restaurant inconnu',
                               emoji: hasImage ? "" : "🍽️",
@@ -560,7 +580,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               deliveryFee: deliveryStr,
                               deliveryTime: isAvailable ? "30 min" : "-",
                               distance: distStr,
-                              priceInfo: "Plats dès 10€",
+                              priceInfo: priceInfoStr,
                               imageUrl: hasImage ? restoImg : null,
                               imageGradient: const [Color(0xFF071408), Color(0xFF0F2A16), Color(0xFF1A5030)],
                             );
