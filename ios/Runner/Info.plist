@@ -33,6 +33,7 @@
 			<string>FirebasePhoneNumberAuth</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>app-1-809394357365-ios-5e98d98f929041103f643c</string>
 				<string>app-1-809394357365-ios-6c3ffc02c4dab6fe3f643c</string>
 			</array>
 		</dict>

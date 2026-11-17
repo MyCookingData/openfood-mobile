@@ -1,6 +1,7 @@
 import Flutter
 import UIKit
 import FirebaseAuth
+import FirebaseCore
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -17,7 +18,7 @@ import FirebaseAuth
     open url: URL,
     options: [UIApplication.OpenURLOptionsKey : Any] = [:]
   ) -> Bool {
-    if Auth.auth().canHandle(url) {
+    if FirebaseApp.allApps?.isEmpty == false, Auth.auth().canHandle(url) {
       return true
     }
     return super.application(app, open: url, options: options)
@@ -28,7 +29,7 @@ import FirebaseAuth
     didReceiveRemoteNotification notification: [AnyHashable : Any],
     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
-    if Auth.auth().canHandleNotification(notification) {
+    if FirebaseApp.allApps?.isEmpty == false, Auth.auth().canHandleNotification(notification) {
       completionHandler(.noData)
       return
     }

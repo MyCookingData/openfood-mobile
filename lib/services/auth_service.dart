@@ -160,37 +160,62 @@ class AuthService {
   // Envoi du SMS (OTP)
   Future<void> sendOTP(String rawPhoneNumber) async {
     final String formattedPhone = formatPhoneNumber(rawPhoneNumber);
+    if (formattedPhone.isEmpty || formattedPhone.length < 8) {
+      throw Exception("Veuillez saisir un numéro de téléphone valide.");
+    }
+
     final completer = Completer<void>();
 
-    await _firebaseAuth.verifyPhoneNumber(
-      phoneNumber: formattedPhone,
-      verificationCompleted: (auth.PhoneAuthCredential credential) async {
-        // Résolution automatique sur Android si le SMS est lu
-        try {
-          if (currentUser != null) {
-            await currentUser!.linkWithCredential(credential);
-            await _firestore.collection('users').doc(currentUser!.uid).update({
-              'isPhoneVerified': true,
-              'phone': formattedPhone,
-            }).catchError((_) {});
-          }
-        } catch (_) {}
-      },
-      verificationFailed: (auth.FirebaseAuthException e) {
-        // ignore: avoid_print
-        print("FirebaseAuth PhoneAuth verificationFailed: code=${e.code}, message=${e.message}");
-        if (!completer.isCompleted) completer.completeError(_handleAuthException(e));
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        _verificationId = verificationId;
-        if (!completer.isCompleted) completer.complete();
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        _verificationId = verificationId;
+    try {
+      await _firebaseAuth.verifyPhoneNumber(
+        phoneNumber: formattedPhone,
+        verificationCompleted: (auth.PhoneAuthCredential credential) async {
+          // Résolution automatique sur Android si le SMS est lu
+          try {
+            if (currentUser != null) {
+              await currentUser!.linkWithCredential(credential);
+              await _firestore.collection('users').doc(currentUser!.uid).update({
+                'isPhoneVerified': true,
+                'phone': formattedPhone,
+              }).catchError((_) {});
+            }
+          } catch (_) {}
+        },
+        verificationFailed: (auth.FirebaseAuthException e) {
+          // ignore: avoid_print
+          print("FirebaseAuth PhoneAuth verificationFailed: code=${e.code}, message=${e.message}");
+          if (!completer.isCompleted) completer.completeError(_handleAuthException(e));
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          // ignore: avoid_print
+          print("FirebaseAuth PhoneAuth codeSent: verificationId=$verificationId");
+          _verificationId = verificationId;
+          if (!completer.isCompleted) completer.complete();
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          // ignore: avoid_print
+          print("FirebaseAuth PhoneAuth codeAutoRetrievalTimeout: verificationId=$verificationId");
+          _verificationId = verificationId;
+        },
+      );
+    } catch (e) {
+      // ignore: avoid_print
+      print("FirebaseAuth verifyPhoneNumber synchronous error: $e");
+      if (!completer.isCompleted) {
+        if (e is auth.FirebaseAuthException) {
+          completer.completeError(_handleAuthException(e));
+        } else {
+          completer.completeError(e);
+        }
+      }
+    }
+
+    return completer.future.timeout(
+      const Duration(seconds: 45),
+      onTimeout: () {
+        throw Exception("Le délai d'envoi du code SMS a expiré. Veuillez vérifier votre connexion ou réessayer.");
       },
     );
-
-    return completer.future;
   }
 
   // Vérification de l'OTP saisi par l'utilisateur
