@@ -29,8 +29,8 @@ class RestaurantCard extends StatelessWidget {
     this.statusColor = 'green',
     this.promos = '',
     this.promoColor = 'red',
-    required this.rating,
-    required this.reviews,
+    this.rating = '',
+    this.reviews = '',
     required this.tags,
     required this.deliveryFee,
     required this.deliveryTime,
@@ -175,35 +175,11 @@ class RestaurantCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      name,
-                      style: AppTheme.titleStyle.copyWith(fontSize: 17),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surface2,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Row(
-                        children: [
-                          const Text("★", style: TextStyle(color: AppTheme.gold, fontSize: 12)),
-                          const SizedBox(width: 4),
-                          Text(
-                            "$rating ",
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.white),
-                          ),
-                          Text(
-                            "($reviews)",
-                            style: const TextStyle(color: AppTheme.muted, fontSize: 10),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                Text(
+                  name,
+                  style: AppTheme.titleStyle.copyWith(fontSize: 17),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 7),
                 Wrap(

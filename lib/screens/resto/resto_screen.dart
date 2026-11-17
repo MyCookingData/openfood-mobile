@@ -523,7 +523,6 @@ class _RestoScreenState extends State<RestoScreen> {
                           runSpacing: 8,
                           children: [
                             _buildInfoPill("Ouvert · ferme à 22h", color: AppTheme.greenXl, showDot: true),
-                            _buildInfoPill("★ 4.8 (142 avis)", color: AppTheme.gold),
                             _buildInfoPill("⏱ 25–35 min"),
                             _buildInfoPill("🛵 2,50€"),
                             if (insta.isNotEmpty) _buildInfoPill("📷 Insta", onTap: () => launchUrl(Uri.parse(insta))),

@@ -538,8 +538,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               name: restoData['name'] ?? 'Restaurant inconnu',
                               emoji: hasImage ? "" : "🍽️",
                               status: isAvailable ? "Ouvert" : "Trop loin",
-                              rating: restoData['rating']?.toString() ?? "N/A",
-                              reviews: "Nouveau",
                               tags: restoData['zone'] != null ? [restoData['zone']] : ["Gourmet"],
                               deliveryFee: deliveryStr,
                               deliveryTime: isAvailable ? "30 min" : "-",
