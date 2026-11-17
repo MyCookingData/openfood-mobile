@@ -55,8 +55,8 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCaAfkg8zLlK8gU42rDJ4zeieZ4xXtXp-k',
-    appId: '1:809394357365:ios:6c3ffc02c4dab6fe3f643c',
+    apiKey: 'AIzaSyBJC52__iOIIR8FsoLexokRXPy_8xkGwnc',
+    appId: '1:809394357365:ios:5e98d98f929041103f643c',
     messagingSenderId: '809394357365',
     projectId: 'open-food-app-819c2',
     storageBucket: 'open-food-app-819c2.firebasestorage.app',
