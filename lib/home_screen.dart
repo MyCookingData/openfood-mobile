@@ -4,9 +4,7 @@ import 'core/theme.dart';
 import 'widgets/restaurant_card.dart';
 import 'widgets/dish_card.dart';
 import 'widgets/category_icon.dart';
-import 'widgets/banner_card.dart';
 import 'screens/resto/resto_screen.dart';
-import 'screens/dashboard/dashboard_layout.dart' as dashboard;
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,14 +16,11 @@ import 'utils/restaurant_helper.dart';
 import 'screens/profile_screen.dart';
 import 'widgets/address_selector_modal.dart';
 import 'screens/cart_screen.dart';
-import 'screens/livreur/views/livreur_dashboard_view.dart';
 import 'services/database_service.dart';
 import 'providers/cart_provider.dart';
 import 'providers/location_provider.dart';
 import 'package:latlong2/latlong.dart';
 
-import 'services/carousel_service.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'screens/explorer_screen.dart';
 import 'screens/filter_modal.dart';
 import 'widgets/home_carousel_widget.dart';
@@ -534,10 +529,33 @@ class _HomeScreenState extends State<HomeScreen> {
                             final String restoImg = (restoData['imageUrl'] ?? restoData['image'] ?? restoData['coverImage'] ?? restoData['photoUrl'] ?? '').toString().trim();
                             final bool hasImage = restoImg.isNotEmpty;
 
+                            Map<String, dynamic>? openingHours;
+                            if (restoData['openingHours'] is Map) {
+                              openingHours = Map<String, dynamic>.from(restoData['openingHours'] as Map);
+                            }
+                            final openStatus = OpeningHoursHelper.getStatus(
+                              openingHours,
+                              manualStatus: restoData['status']?.toString(),
+                            );
+
+                            String cardStatus;
+                            String cardStatusColor;
+                            if (!isAvailable) {
+                              cardStatus = "Trop loin";
+                              cardStatusColor = 'orange';
+                            } else if (openStatus.isOpen) {
+                              cardStatus = openStatus.detailStatus;
+                              cardStatusColor = 'green';
+                            } else {
+                              cardStatus = openStatus.detailStatus;
+                              cardStatusColor = 'red';
+                            }
+
                             Widget card = RestaurantCard(
                               name: restoData['name'] ?? 'Restaurant inconnu',
                               emoji: hasImage ? "" : "🍽️",
-                              status: isAvailable ? "Ouvert" : "Trop loin",
+                              status: cardStatus,
+                              statusColor: cardStatusColor,
                               tags: restoData['zone'] != null ? [restoData['zone']] : ["Gourmet"],
                               deliveryFee: deliveryStr,
                               deliveryTime: isAvailable ? "30 min" : "-",
@@ -549,6 +567,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             
                             if (!isAvailable) {
                               card = Opacity(opacity: 0.5, child: card);
+                            } else if (!openStatus.isOpen) {
+                              card = Opacity(opacity: 0.78, child: card);
                             }
 
                             return JuicyWrapper(

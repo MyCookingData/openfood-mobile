@@ -1,30 +1,59 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:openfood_mobile/main.dart';
+import 'package:openfood_mobile/utils/opening_hours_helper.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('OpeningHoursHelper Tests', () {
+    test('defaultOpeningHours structure', () {
+      final hours = OpeningHoursHelper.defaultOpeningHours();
+      expect(hours.containsKey('monday'), isTrue);
+      expect(hours.containsKey('sunday'), isTrue);
+      expect(hours['monday']!['isOpen'], isTrue);
+      expect(hours['sunday']!['isOpen'], isFalse);
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('parseMinutes works properly', () {
+      expect(OpeningHoursHelper.parseMinutes('11:30'), 11 * 60 + 30);
+      expect(OpeningHoursHelper.parseMinutes('11h30'), 11 * 60 + 30);
+      expect(OpeningHoursHelper.parseMinutes('00:00'), 0);
+      expect(OpeningHoursHelper.parseMinutes(null), isNull);
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('formatTimeDisplay formats properly', () {
+      expect(OpeningHoursHelper.formatTimeDisplay('11:30'), '11h30');
+      expect(OpeningHoursHelper.formatTimeDisplay('9:05'), '09h05');
+      expect(OpeningHoursHelper.formatTimeDisplay('18h00'), '18h00');
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('getStatus returns open during open slot', () {
+      final hours = {
+        'monday': const DaySchedule(isOpen: true, open: '11:30', close: '14:30', hasSecondSlot: true, open2: '18:30', close2: '22:30').toJson(),
+      };
+      // Monday at 12:15
+      final dt = DateTime(2026, 11, 16, 12, 15); // Nov 16, 2026 is Monday
+      final status = OpeningHoursHelper.getStatus(hours, now: dt);
+      expect(status.isOpen, isTrue);
+      expect(status.detailStatus, contains('ferme à 14h30'));
+    });
+
+    test('getStatus returns closed between lunch and dinner slot', () {
+      final hours = {
+        'monday': const DaySchedule(isOpen: true, open: '11:30', close: '14:30', hasSecondSlot: true, open2: '18:30', close2: '22:30').toJson(),
+      };
+      // Monday at 16:00
+      final dt = DateTime(2026, 11, 16, 16, 00);
+      final status = OpeningHoursHelper.getStatus(hours, now: dt);
+      expect(status.isOpen, isFalse);
+      expect(status.detailStatus, contains('ouvre à 18h30'));
+    });
+
+    test('getStatus respects manual inactif override', () {
+      final hours = {
+        'monday': const DaySchedule(isOpen: true, open: '11:30', close: '14:30', hasSecondSlot: false).toJson(),
+      };
+      final dt = DateTime(2026, 11, 16, 12, 15);
+      final status = OpeningHoursHelper.getStatus(hours, manualStatus: 'inactif', now: dt);
+      expect(status.isOpen, isFalse);
+      expect(status.detailStatus, contains('Fermé'));
+    });
   });
 }

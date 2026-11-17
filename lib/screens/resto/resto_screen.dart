@@ -123,13 +123,181 @@ class _RestoScreenState extends State<RestoScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (showDot) ...[
-              Container(width: 6, height: 6, decoration: const BoxDecoration(color: AppTheme.greenXl, shape: BoxShape.circle)),
-              const SizedBox(width: 4),
+              Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+              const SizedBox(width: 5),
             ],
             Text(text, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
+    );
+  }
+
+  void _showOpeningHoursModal(BuildContext context, Map<String, dynamic>? openingHours, String restoName) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final currentWeekday = DateTime.now().weekday;
+        final currentDayKey = OpeningHoursHelper.dayKeyFromWeekday(currentWeekday);
+        final status = OpeningHoursHelper.getStatus(openingHours);
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF141915),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Horaires d\'ouverture',
+                          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          restoName,
+                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: status.isOpen ? const Color(0xFF0A2412) : const Color(0xFF2C0B0E),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: status.isOpen ? const Color(0xFF1E8B3A) : const Color(0xFFFF6B6B),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: status.isOpen ? AppTheme.greenXl : const Color(0xFFFF6B6B),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          status.isOpen ? 'Ouvert' : 'Fermé',
+                          style: TextStyle(
+                            color: status.isOpen ? AppTheme.greenXl : const Color(0xFFFF6B6B),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(color: Colors.white12),
+              const SizedBox(height: 8),
+              ...OpeningHoursHelper.dayKeys.map((dayKey) {
+                final isToday = dayKey == currentDayKey;
+                final rawDay = openingHours?[dayKey];
+                final DaySchedule schedule = rawDay is Map
+                    ? DaySchedule.fromJson(Map<String, dynamic>.from(rawDay))
+                    : const DaySchedule(isOpen: false);
+                final dayLabel = OpeningHoursHelper.dayNamesFr[dayKey] ?? dayKey;
+                final summary = OpeningHoursHelper.formatScheduleSummary(schedule);
+
+                return Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isToday ? AppTheme.greenXl.withValues(alpha: 0.12) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                    border: isToday ? Border.all(color: AppTheme.greenXl.withValues(alpha: 0.35)) : null,
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 100,
+                        child: Row(
+                          children: [
+                            Text(
+                              dayLabel,
+                              style: TextStyle(
+                                color: isToday ? AppTheme.greenXl : Colors.white,
+                                fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
+                                fontSize: 14,
+                              ),
+                            ),
+                            if (isToday) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                width: 5,
+                                height: 5,
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.greenXl,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          summary,
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                            color: !schedule.isOpen
+                                ? Colors.white38
+                                : (isToday ? Colors.white : Colors.white70),
+                            fontSize: 13,
+                            fontWeight: isToday ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.surface2,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Fermer'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -511,23 +679,72 @@ class _RestoScreenState extends State<RestoScreen> {
                         String insta = "";
                         String fb = "";
                         String tiktok = "";
+                        Map<String, dynamic>? openingHours;
+                        String manualStatus = 'actif';
                         if (restoSnap.hasData && restoSnap.data!.docs.isNotEmpty) {
                           final rd = restoSnap.data!.docs.first.data() as Map<String, dynamic>;
                           insta = rd['instagram'] ?? "";
                           fb = rd['facebook'] ?? "";
                           tiktok = rd['tiktok'] ?? "";
+                          if (rd['openingHours'] is Map) {
+                            openingHours = Map<String, dynamic>.from(rd['openingHours'] as Map);
+                          }
+                          manualStatus = rd['status'] ?? 'actif';
                         }
                         
-                        return Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                        final openStatus = OpeningHoursHelper.getStatus(
+                          openingHours,
+                          manualStatus: manualStatus,
+                        );
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildInfoPill("Ouvert · ferme à 22h", color: AppTheme.greenXl, showDot: true),
-                            _buildInfoPill("⏱ 25–35 min"),
-                            _buildInfoPill("🛵 2,50€"),
-                            if (insta.isNotEmpty) _buildInfoPill("📷 Insta", onTap: () => launchUrl(Uri.parse(insta))),
-                            if (fb.isNotEmpty) _buildInfoPill("📘 FB", onTap: () => launchUrl(Uri.parse(fb))),
-                            if (tiktok.isNotEmpty) _buildInfoPill("🎵 TikTok", onTap: () => launchUrl(Uri.parse(tiktok))),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                _buildInfoPill(
+                                  openStatus.detailStatus,
+                                  color: openStatus.isOpen ? AppTheme.greenXl : const Color(0xFFFF6B6B),
+                                  showDot: true,
+                                  onTap: () => _showOpeningHoursModal(context, openingHours, widget.restaurantName),
+                                ),
+                                _buildInfoPill(
+                                  "🕒 Horaires",
+                                  onTap: () => _showOpeningHoursModal(context, openingHours, widget.restaurantName),
+                                ),
+                                _buildInfoPill("⏱ 25–35 min"),
+                                _buildInfoPill("🛵 2,50€"),
+                                if (insta.isNotEmpty) _buildInfoPill("📷 Insta", onTap: () => launchUrl(Uri.parse(insta))),
+                                if (fb.isNotEmpty) _buildInfoPill("📘 FB", onTap: () => launchUrl(Uri.parse(fb))),
+                                if (tiktok.isNotEmpty) _buildInfoPill("🎵 TikTok", onTap: () => launchUrl(Uri.parse(tiktok))),
+                              ],
+                            ),
+                            if (!openStatus.isOpen) ...[
+                              const SizedBox(height: 10),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2C0B0E),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.info_outline, color: Color(0xFFFF6B6B), size: 16),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Ce restaurant est actuellement fermé (${openStatus.nextChangeText}). Vous pouvez consulter la carte.',
+                                        style: const TextStyle(color: Color(0xFFFFB4AB), fontSize: 11, fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         );
                       }

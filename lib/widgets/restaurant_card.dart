@@ -45,6 +45,10 @@ class RestaurantCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool hasImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
+    final bool isClosed = statusColor == 'red' || statusColor == 'orange';
+    final Color badgeColor = isClosed ? const Color(0xFFFF6B6B) : AppTheme.greenXl;
+    final Color badgeBg = isClosed ? const Color(0xFF2C0B0E).withValues(alpha: 0.9) : const Color(0xFF0A2412).withValues(alpha: 0.85);
+    final Color badgeBorder = isClosed ? const Color(0xFFFF6B6B).withValues(alpha: 0.5) : const Color(0xFF1E8B3A).withValues(alpha: 0.4);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -137,16 +141,16 @@ class RestaurantCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E8B3A).withValues(alpha: 0.15),
+                    color: badgeBg,
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: const Color(0xFF1E8B3A).withValues(alpha: 0.3)),
+                    border: Border.all(color: badgeBorder),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(width: 6, height: 6, decoration: const BoxDecoration(color: AppTheme.greenXl, shape: BoxShape.circle)),
+                      Container(width: 6, height: 6, decoration: BoxDecoration(color: badgeColor, shape: BoxShape.circle)),
                       const SizedBox(width: 5),
-                      Text(status, style: const TextStyle(color: AppTheme.greenXl, fontSize: 11, fontWeight: FontWeight.w700)),
+                      Text(status, style: TextStyle(color: badgeColor, fontSize: 11, fontWeight: FontWeight.w700)),
                     ],
                   ),
                 ),
