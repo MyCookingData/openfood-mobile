@@ -177,6 +177,8 @@ class AuthService {
         } catch (_) {}
       },
       verificationFailed: (auth.FirebaseAuthException e) {
+        // ignore: avoid_print
+        print("FirebaseAuth PhoneAuth verificationFailed: code=${e.code}, message=${e.message}");
         if (!completer.isCompleted) completer.completeError(_handleAuthException(e));
       },
       codeSent: (String verificationId, int? resendToken) {
@@ -474,6 +476,13 @@ class AuthService {
         return Exception("Le code de validation SMS saisi est incorrect. Veuillez vérifier les 6 chiffres.");
       case 'session-expired':
         return Exception("Le code de validation SMS a expiré. Veuillez demander un nouveau code.");
+      case 'app-verification-failed':
+        return Exception("La vérification de sécurité de l'application a échoué (APNs / intégrité de l'appareil). Veuillez vérifier les réglages ou réessayer.");
+      case 'web-context-cancelled':
+        return Exception("La vérification de sécurité a été interrompue.");
+      case 'web-context-already-presented':
+      case 'web-internal-error':
+        return Exception("Une erreur s'est produite lors de la vérification de sécurité (${e.code}). Veuillez réessayer.");
       default:
         return Exception(e.message ?? "Une erreur d'authentification est survenue (${e.code}).");
     }
