@@ -183,7 +183,7 @@ class AuthService {
         },
         verificationFailed: (auth.FirebaseAuthException e) {
           // ignore: avoid_print
-          print("FirebaseAuth PhoneAuth verificationFailed: code=${e.code}, message=${e.message}");
+          print("FirebaseAuth PhoneAuth verificationFailed: code=${e.code}, message=${e.message}, details=${e.details}");
           if (!completer.isCompleted) completer.completeError(_handleAuthException(e));
         },
         codeSent: (String verificationId, int? resendToken) {
