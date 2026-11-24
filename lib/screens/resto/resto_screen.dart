@@ -16,6 +16,7 @@ import '../../services/carousel_service.dart';
 import '../cart_screen.dart';
 import 'widgets/hero_slider.dart';
 import '../../utils/restaurant_helper.dart';
+import '../../utils/ui_feedback.dart';
 
 class RestoScreen extends StatefulWidget {
   final String restaurantName;
@@ -429,6 +430,11 @@ class _RestoScreenState extends State<RestoScreen> {
               String restoImage = "";
               String restoType = "";
               double? restoRating;
+              String insta = "";
+              String fb = "";
+              String tiktok = "";
+              Map<String, dynamic>? openingHours;
+              String manualStatus = 'actif';
               if (restoSnap.hasData && restoSnap.data!.docs.isNotEmpty) {
                 final doc = restoSnap.data!.docs.first;
                 restaurantId = doc.id;
@@ -440,8 +446,19 @@ class _RestoScreenState extends State<RestoScreen> {
                 restoImage = (rd['imageUrl'] ?? rd['image'] ?? rd['coverImage'] ?? rd['photo'] ?? "").toString();
                 restoType = (rd['type'] ?? "").toString();
                 restoRating = (rd['rating'] as num?)?.toDouble();
+                insta = (rd['instagram'] ?? "").toString();
+                fb = (rd['facebook'] ?? "").toString();
+                tiktok = (rd['tiktok'] ?? "").toString();
+                if (rd['openingHours'] is Map) {
+                  openingHours = Map<String, dynamic>.from(rd['openingHours'] as Map);
+                }
+                manualStatus = (rd['status'] ?? 'actif').toString();
               }
               RestaurantHelper.registerRestaurant(restaurantId, actualRestoName);
+              final openStatus = OpeningHoursHelper.getStatus(
+                openingHours,
+                manualStatus: manualStatus,
+              );
 
               return StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
@@ -516,7 +533,7 @@ class _RestoScreenState extends State<RestoScreen> {
                 listItems.add(const SizedBox(height: 13));
                 listItems.add(
                   SizedBox(
-                    height: 290,
+                    height: 274,
                     child: ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       scrollDirection: Axis.horizontal,
@@ -535,15 +552,33 @@ class _RestoScreenState extends State<RestoScreen> {
                           description: data['description'] ?? '',
                           price: product.priceHT * (1 + product.vatRate / 100),
                           imageUrl: product.image,
-                          ordersCount: "${(10 + Random().nextInt(50))} commandes",
+                          isRestaurantOpen: openStatus.isOpen,
                           imageGradient: const [Color(0xFF071408), Color(0xFF1A4020)],
                           onTap: () {
                             HapticFeedback.lightImpact();
-                            PersoModal.show(context, product: product, emoji: "");
+                            PersoModal.show(
+                              context,
+                              product: product,
+                              emoji: "",
+                              isRestaurantOpen: openStatus.isOpen,
+                              closedStatusMessage: openStatus.nextChangeText,
+                            );
                           },
                           onAdd: () {
                             HapticFeedback.lightImpact();
-                            PersoModal.show(context, product: product, emoji: "");
+                            if (!openStatus.isOpen) {
+                              UiFeedback.showWarning(
+                                context,
+                                RestaurantHelper.closedOrderMessage(actualRestoName, openStatus),
+                              );
+                              return;
+                            }
+                            PersoModal.show(
+                              context,
+                              product: product,
+                              emoji: "",
+                              isRestaurantOpen: true,
+                            );
                           },
                         );
                       }).toList(),
@@ -583,15 +618,34 @@ class _RestoScreenState extends State<RestoScreen> {
                           price: product.priceHT * (1 + product.vatRate / 100),
                           emoji: "",
                           isAvailable: product.isAvailable,
+                          isRestaurantOpen: openStatus.isOpen,
                           imageGradient: const [Color(0xFF0A1A0D), Color(0xFF1A3A20)],
                           imageUrl: product.image,
                           onTap: product.isAvailable ? () {
                             HapticFeedback.lightImpact();
-                            PersoModal.show(context, product: product, emoji: "");
+                            PersoModal.show(
+                              context,
+                              product: product,
+                              emoji: "",
+                              isRestaurantOpen: openStatus.isOpen,
+                              closedStatusMessage: openStatus.nextChangeText,
+                            );
                           } : () {},
                           onAdd: product.isAvailable ? () {
                             HapticFeedback.lightImpact();
-                            PersoModal.show(context, product: product, emoji: "");
+                            if (!openStatus.isOpen) {
+                              UiFeedback.showWarning(
+                                context,
+                                RestaurantHelper.closedOrderMessage(actualRestoName, openStatus),
+                              );
+                              return;
+                            }
+                            PersoModal.show(
+                              context,
+                              product: product,
+                              emoji: "",
+                              isRestaurantOpen: true,
+                            );
                           } : () {},
                         );
                       }).toList(),
@@ -673,81 +727,57 @@ class _RestoScreenState extends State<RestoScreen> {
                       color: AppTheme.surface,
                       border: Border(bottom: BorderSide(color: AppTheme.border)),
                     ),
-                    child: FutureBuilder<QuerySnapshot>(
-                      future: _restaurantFuture,
-                      builder: (context, restoSnap) {
-                        String insta = "";
-                        String fb = "";
-                        String tiktok = "";
-                        Map<String, dynamic>? openingHours;
-                        String manualStatus = 'actif';
-                        if (restoSnap.hasData && restoSnap.data!.docs.isNotEmpty) {
-                          final rd = restoSnap.data!.docs.first.data() as Map<String, dynamic>;
-                          insta = rd['instagram'] ?? "";
-                          fb = rd['facebook'] ?? "";
-                          tiktok = rd['tiktok'] ?? "";
-                          if (rd['openingHours'] is Map) {
-                            openingHours = Map<String, dynamic>.from(rd['openingHours'] as Map);
-                          }
-                          manualStatus = rd['status'] ?? 'actif';
-                        }
-                        
-                        final openStatus = OpeningHoursHelper.getStatus(
-                          openingHours,
-                          manualStatus: manualStatus,
-                        );
-
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
+                            _buildInfoPill(
+                              openStatus.detailStatus,
+                              color: openStatus.isOpen ? AppTheme.greenXl : const Color(0xFFFF6B6B),
+                              showDot: true,
+                              onTap: () => _showOpeningHoursModal(context, openingHours, actualRestoName),
+                            ),
+                            _buildInfoPill(
+                              "🕒 Horaires",
+                              onTap: () => _showOpeningHoursModal(context, openingHours, actualRestoName),
+                            ),
+                            _buildInfoPill("⏱ 25–35 min"),
+                            _buildInfoPill("🛵 2,50€"),
+                            if (insta.isNotEmpty) _buildInfoPill("📷 Insta", onTap: () => launchUrl(Uri.parse(insta))),
+                            if (fb.isNotEmpty) _buildInfoPill("📘 FB", onTap: () => launchUrl(Uri.parse(fb))),
+                            if (tiktok.isNotEmpty) _buildInfoPill("🎵 TikTok", onTap: () => launchUrl(Uri.parse(tiktok))),
+                          ],
+                        ),
+                        if (!openStatus.isOpen) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2C0B0E),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
                               children: [
-                                _buildInfoPill(
-                                  openStatus.detailStatus,
-                                  color: openStatus.isOpen ? AppTheme.greenXl : const Color(0xFFFF6B6B),
-                                  showDot: true,
-                                  onTap: () => _showOpeningHoursModal(context, openingHours, widget.restaurantName),
+                                const Icon(Icons.info_outline, color: Color(0xFFFF6B6B), size: 16),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    openStatus.nextChangeText.isNotEmpty
+                                        ? 'Ce restaurant est actuellement fermé (${openStatus.nextChangeText}). Vous pouvez consulter la carte, mais la commande est indisponible.'
+                                        : 'Ce restaurant est actuellement fermé. Vous pouvez consulter la carte, mais la commande est indisponible.',
+                                    style: const TextStyle(color: Color(0xFFFFB4AB), fontSize: 11, fontWeight: FontWeight.w500),
+                                  ),
                                 ),
-                                _buildInfoPill(
-                                  "🕒 Horaires",
-                                  onTap: () => _showOpeningHoursModal(context, openingHours, widget.restaurantName),
-                                ),
-                                _buildInfoPill("⏱ 25–35 min"),
-                                _buildInfoPill("🛵 2,50€"),
-                                if (insta.isNotEmpty) _buildInfoPill("📷 Insta", onTap: () => launchUrl(Uri.parse(insta))),
-                                if (fb.isNotEmpty) _buildInfoPill("📘 FB", onTap: () => launchUrl(Uri.parse(fb))),
-                                if (tiktok.isNotEmpty) _buildInfoPill("🎵 TikTok", onTap: () => launchUrl(Uri.parse(tiktok))),
                               ],
                             ),
-                            if (!openStatus.isOpen) ...[
-                              const SizedBox(height: 10),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2C0B0E),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.3)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.info_outline, color: Color(0xFFFF6B6B), size: 16),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        'Ce restaurant est actuellement fermé (${openStatus.nextChangeText}). Vous pouvez consulter la carte.',
-                                        style: const TextStyle(color: Color(0xFFFFB4AB), fontSize: 11, fontWeight: FontWeight.w500),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ],
-                        );
-                      }
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   _buildCategoryTabs(),

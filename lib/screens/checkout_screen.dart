@@ -19,7 +19,9 @@ import 'order_success_screen.dart';
 import '../services/analytics_service.dart';
 import '../services/auth_service.dart';
 import '../services/promo_service.dart';
+import '../utils/restaurant_helper.dart';
 import '../utils/ui_feedback.dart';
+import 'package:openfood_models/openfood_models.dart';
 import 'address_picker_screen.dart';
 import 'auth/login_screen.dart';
 import 'profile_screen.dart';
@@ -35,6 +37,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final TextEditingController _promoController = TextEditingController();
   bool _saveCard = false;
   bool _isProcessing = false;
+  RestaurantOpenStatus? _restaurantOpenStatus;
   final DateTime _enteredAt = DateTime.now();
 
 
@@ -71,6 +74,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (cart.items.isEmpty) return;
 
     final loc = Provider.of<LocationProvider>(context, listen: false);
+    final liveStatus = await RestaurantHelper.fetchRestaurantOpenStatus(
+      cart.items.values.first.restaurantId,
+    );
+    if (!mounted) return;
+    if (!liveStatus.isOpen) {
+      setState(() => _restaurantOpenStatus = liveStatus);
+      UiFeedback.showError(
+        context,
+        RestaurantHelper.closedOrderMessage(cart.restaurantName, liveStatus),
+      );
+      return;
+    }
     
     if (!cart.isClickAndCollect) {
       if (loc.addresses.isEmpty) {
@@ -183,7 +198,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       // Initialisation du PaymentSheet native iOS/Android
       await StripeService.instance.initPaymentSheet(
-        paymentIntentClientSecret: clientSecret!,
+        paymentIntentClientSecret: clientSecret,
         customerId: null,
         setupIntentClientSecret: null,
       );
@@ -409,7 +424,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final loc = Provider.of<LocationProvider>(context, listen: false);
       final cart = Provider.of<CartProvider>(context, listen: false);
       
@@ -418,6 +433,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         cart.setClickAndCollect(true);
       } else if (loc.selectedAddress != null) {
         cart.updateRealDistance(loc.selectedAddress!.latitude, loc.selectedAddress!.longitude);
+      }
+
+      if (cart.items.isNotEmpty) {
+        final status = await RestaurantHelper.fetchRestaurantOpenStatus(
+          cart.items.values.first.restaurantId,
+        );
+        if (mounted) {
+          setState(() => _restaurantOpenStatus = status);
+        }
       }
     });
   }
@@ -430,6 +454,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     final cart = Provider.of<CartProvider>(context);
+    final bool isClosed = _restaurantOpenStatus != null && !_restaurantOpenStatus!.isOpen;
 
     return Stack(
       alignment: Alignment.center,
@@ -507,14 +532,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const Expanded(
                         child: Text(
-                          "Récapitulatif de commande",
-                          style: TextStyle(color: AppTheme.cream, fontSize: 16, fontWeight: FontWeight.bold),
-                          overflow: TextOverflow.ellipsis,
+                          "Récapitulatif\nde commande",
+                          maxLines: 2,
+                          softWrap: true,
+                          style: TextStyle(
+                            color: AppTheme.cream,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            height: 1.2,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 10),
                       if (cart.items.isNotEmpty)
                         Flexible(
                           child: Container(
@@ -711,11 +744,36 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                   const SizedBox(height: 12),
 
+                  if (isClosed) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2C0B0E),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.45)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.lock_clock_outlined, color: Color(0xFFFF6B6B), size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              RestaurantHelper.closedOrderMessage(cart.restaurantName, _restaurantOpenStatus!),
+                              style: const TextStyle(color: Color(0xFFFFB4AB), fontSize: 12, fontWeight: FontWeight.w600, height: 1.35),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   // 4. Action de paiement
                   ElevatedButton(
-                    onPressed: _isProcessing ? null : () => _processPayment(cart),
+                    onPressed: (_isProcessing || isClosed) ? null : () => _processPayment(cart),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.green,
+                      disabledBackgroundColor: AppTheme.surface3,
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       elevation: 8,
@@ -723,15 +781,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                     child: _isProcessing
                         ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.apple, color: Colors.white),
-                              Icon(Icons.g_mobiledata, color: Colors.white, size: 30),
-                              SizedBox(width: 8),
-                              Text("PAYER MAINTENANT", style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-                            ],
-                          ),
+                        : isClosed
+                            ? const Text("RESTAURANT FERMÉ", style: TextStyle(color: AppTheme.muted, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5))
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.apple, color: Colors.white),
+                                  Icon(Icons.g_mobiledata, color: Colors.white, size: 30),
+                                  SizedBox(width: 8),
+                                  Text("PAYER MAINTENANT", style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                                ],
+                              ),
                   ),
                   
                   const SizedBox(height: 40),

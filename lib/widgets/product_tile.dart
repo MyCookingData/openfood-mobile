@@ -12,6 +12,7 @@ class ProductTile extends StatelessWidget {
   final String? tag;
   final String? stockWarn;
   final bool isAvailable;
+  final bool isRestaurantOpen;
   final VoidCallback onTap;
   final VoidCallback onAdd;
 
@@ -26,6 +27,7 @@ class ProductTile extends StatelessWidget {
     this.tag,
     this.stockWarn,
     this.isAvailable = true,
+    this.isRestaurantOpen = true,
     required this.onTap,
     required this.onAdd,
   });
@@ -161,7 +163,7 @@ class ProductTile extends StatelessWidget {
               ),
             ),
             // Add Button
-            if (isAvailable)
+            if (isAvailable && isRestaurantOpen)
               GestureDetector(
                 onTap: onAdd,
                 child: Container(
@@ -173,6 +175,22 @@ class ProductTile extends StatelessWidget {
                   ),
                   child: const Center(
                     child: Text("+", style: TextStyle(color: Colors.white, fontSize: 20)),
+                  ),
+                ),
+              )
+            else if (isAvailable && !isRestaurantOpen)
+              GestureDetector(
+                onTap: onAdd,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface3,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.border2),
+                  ),
+                  child: const Text(
+                    "Fermé",
+                    style: TextStyle(color: AppTheme.muted2, fontSize: 10, fontWeight: FontWeight.w700),
                   ),
                 ),
               )

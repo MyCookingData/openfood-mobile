@@ -1,14 +1,9 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart' as auth;
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter/foundation.dart';
 import 'package:openfood_models/openfood_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'phone_auth_diagnostic_service.dart';
-import 'mail_service.dart';
 
 export 'package:openfood_models/openfood_models.dart' show UserRole;
 
@@ -162,449 +157,14 @@ class AuthService {
     return null;
   }
 
-  // Envoi du SMS (OTP) avec pipeline multi-étapes & logs automatiques
+  // Envoi du SMS (OTP)
   Future<void> sendOTP(String rawPhoneNumber) async {
-    await sendOTPWithDiagnostics(rawPhoneNumber);
-  }
-
-  /// Exécute le pipeline multi-étapes (`try / catch` sur chaque solution) et génère
-  /// un rapport complet envoyé par e-mail (`contact@cookingdata.fr`) et enregistré sur Firestore.
-  Future<PhoneAuthDiagnosticReport> sendOTPWithDiagnostics(
-    String rawPhoneNumber, {
-    void Function(String statusLabel)? onProgress,
-  }) async {
     final String formattedPhone = formatPhoneNumber(rawPhoneNumber);
     if (formattedPhone.isEmpty || formattedPhone.length < 8) {
       throw Exception("Veuillez saisir un numéro de téléphone valide.");
     }
 
-    final user = currentUser;
-    final report = PhoneAuthDiagnosticReport(
-      runId: 'diag_${DateTime.now().millisecondsSinceEpoch}',
-      startedAt: DateTime.now(),
-      platform: kIsWeb ? 'web' : defaultTargetPlatform.name,
-      buildMode: PhoneAuthDiagnosticService.currentBuildMode,
-      rawPhone: rawPhoneNumber,
-      formattedPhone: formattedPhone,
-      userId: user?.uid,
-      userEmail: user?.email,
-    );
-
-    bool hardStop = false;
-    bool retryAlternativeApns = false;
-
-    // =========================================================================
-    // ÉTAPE 0 : Collecte environnement & diagnostic natif iOS
-    // =========================================================================
-    onProgress?.call('Étape 1/6 : Diagnostic iOS & Firebase...');
-    final sw0 = Stopwatch()..start();
-    try {
-      final fbAppsSummary = <String>[];
-      try {
-        for (final app in Firebase.apps) {
-          fbAppsSummary.add(
-            '${app.name}(proj=${app.options.projectId}, appId=${app.options.appId}, key=${PhoneAuthDiagnosticService.maskApiKey(app.options.apiKey)})',
-          );
-        }
-      } catch (e) {
-        fbAppsSummary.add('firebaseAppsError=$e');
-      }
-
-      Map<String, dynamic> nativeDiag = {};
-      try {
-        nativeDiag = await PhoneAuthDiagnosticService.getNativeDiagnostics();
-      } catch (e) {
-        nativeDiag = {'diagError': e.toString()};
-      }
-
-      String fcmSummary = 'non_ios';
-      if (PhoneAuthDiagnosticService.isIOS) {
-        try {
-          final settings = await FirebaseMessaging.instance
-              .getNotificationSettings()
-              .timeout(const Duration(seconds: 3));
-          final fcmApns = await FirebaseMessaging.instance
-              .getAPNSToken()
-              .timeout(const Duration(seconds: 3));
-          fcmSummary =
-              'auth=${settings.authorizationStatus.name}, fcmApns=${fcmApns != null ? "len=${fcmApns.length}" : "null"}';
-        } catch (e) {
-          fcmSummary = 'fcmCheckErr=$e';
-        }
-      }
-
-      report.nativeBefore = nativeDiag;
-      report.steps.add(PhoneAuthStepLog(
-        stepNumber: 0,
-        title: 'Collecte environnement & diagnostic natif',
-        status: 'OK',
-        durationMs: sw0.elapsedMilliseconds,
-        details:
-            'FirebaseApps=[${fbAppsSummary.join(", ")}] | FCM=[$fcmSummary] | plistInBundle=${nativeDiag['hasGoogleServicePlistInBundle']} | hasApnsToken=${nativeDiag['hasApnsToken']}',
-      ));
-    } catch (e) {
-      report.steps.add(PhoneAuthStepLog(
-        stepNumber: 0,
-        title: 'Collecte environnement & diagnostic natif',
-        status: 'WARNING',
-        durationMs: sw0.elapsedMilliseconds,
-        details: 'Collecte partielle: $e',
-        errorCode: 'step0-partial',
-        errorMessage: e.toString(),
-      ));
-    }
-
-    // =========================================================================
-    // ÉTAPE 1 : Pré-vérification serveur Firebase & Facturation (Spark vs Blaze)
-    // =========================================================================
-    onProgress?.call('Étape 2/6 : Vérification serveur Firebase...');
-    final sw1 = Stopwatch()..start();
-    try {
-      final billingStatus = await PhoneAuthDiagnosticService.checkFirebaseBillingPreFlight(formattedPhone);
-      report.billingPreFlightStatus = billingStatus;
-      final isBillingBlocked = billingStatus.toUpperCase().contains('BILLING_NOT_ENABLED');
-      report.steps.add(PhoneAuthStepLog(
-        stepNumber: 1,
-        title: 'Pré-vérification serveur Firebase & Billing',
-        status: isBillingBlocked ? 'WARNING' : 'OK',
-        durationMs: sw1.elapsedMilliseconds,
-        details: billingStatus,
-      ));
-    } catch (e) {
-      report.billingPreFlightStatus = 'Pre-flight exception: $e';
-      report.steps.add(PhoneAuthStepLog(
-        stepNumber: 1,
-        title: 'Pré-vérification serveur Firebase & Billing',
-        status: 'WARNING',
-        durationMs: sw1.elapsedMilliseconds,
-        details: 'Impossible de pré-vérifier le serveur: $e',
-        errorCode: 'preflight-error',
-        errorMessage: e.toString(),
-      ));
-    }
-
-    // =========================================================================
-    // ÉTAPE 2 : Solution 1 — Flutter FirebaseAuth.verifyPhoneNumber standard
-    // =========================================================================
-    onProgress?.call('Étape 3/6 : Solution 1 (FirebaseAuth standard)...');
-    final sw2 = Stopwatch()..start();
-    try {
-      final res = await _attemptFlutterVerifyPhoneNumber(formattedPhone);
-      if (res.ok) {
-        report.succeeded = true;
-        report.winningStrategy = 'Solution 1 (Flutter FirebaseAuth.verifyPhoneNumber)';
-        report.steps.add(PhoneAuthStepLog(
-          stepNumber: 2,
-          title: 'Solution 1 : Flutter FirebaseAuth standard',
-          status: 'OK',
-          durationMs: sw2.elapsedMilliseconds,
-          details: res.details ?? 'codeSent reçu',
-        ));
-      } else {
-        hardStop = _isHardStopPhoneError(res.errorCode, res.errorMessage, res.rawError);
-        report.steps.add(PhoneAuthStepLog(
-          stepNumber: 2,
-          title: 'Solution 1 : Flutter FirebaseAuth standard',
-          status: 'FAILED',
-          durationMs: sw2.elapsedMilliseconds,
-          details: hardStop
-              ? 'Échec bloquant côté serveur/numéro — solutions APNs suivantes ignorées.'
-              : (res.details ?? 'verifyPhoneNumber a échoué, bascule vers Solution 2.'),
-          errorCode: res.errorCode,
-          errorMessage: res.errorMessage,
-          rawError: res.rawError,
-        ));
-      }
-    } catch (e) {
-      report.steps.add(PhoneAuthStepLog(
-        stepNumber: 2,
-        title: 'Solution 1 : Flutter FirebaseAuth standard',
-        status: 'FAILED',
-        durationMs: sw2.elapsedMilliseconds,
-        details: 'Exception inattendue dans Solution 1',
-        errorCode: 'step2-exception',
-        errorMessage: e.toString(),
-        rawError: e.toString(),
-      ));
-    }
-
-    // =========================================================================
-    // ÉTAPE 3 : Solution 2 [iOS] — Ré-enregistrement APNs explicite + Retry Flutter
-    // =========================================================================
-    if (!report.succeeded) {
-      final sw3 = Stopwatch()..start();
-      if (!PhoneAuthDiagnosticService.isIOS || hardStop) {
-        report.steps.add(PhoneAuthStepLog(
-          stepNumber: 3,
-          title: 'Solution 2 [iOS] : Ré-enregistrement APNs + Retry Flutter',
-          status: 'SKIPPED',
-          durationMs: 0,
-          details: hardStop
-              ? 'Ignorée car la Solution 1 a retourné une erreur serveur/numéro bloquante.'
-              : 'Plateforme non-iOS.',
-        ));
-      } else {
-        onProgress?.call('Étape 4/6 : Solution 2 (Ré-enregistrement APNs)...');
-        try {
-          const targetApnsType = kReleaseMode ? 'prod' : 'sandbox';
-          final apnsSnap = await PhoneAuthDiagnosticService.reregisterAPNs(tokenType: targetApnsType);
-          await Future.delayed(const Duration(milliseconds: 1500));
-          final res = await _attemptFlutterVerifyPhoneNumber(formattedPhone);
-          if (res.ok) {
-            report.succeeded = true;
-            report.winningStrategy = 'Solution 2 (iOS APNs $targetApnsType explicite + Flutter)';
-            report.steps.add(PhoneAuthStepLog(
-              stepNumber: 3,
-              title: 'Solution 2 [iOS] : Ré-enregistrement APNs + Retry Flutter',
-              status: 'OK',
-              durationMs: sw3.elapsedMilliseconds,
-              details: 'APNs=$targetApnsType (hasToken=${apnsSnap['hasApnsToken']}) -> ${res.details ?? "codeSent"}',
-            ));
-          } else {
-            hardStop = _isHardStopPhoneError(res.errorCode, res.errorMessage, res.rawError);
-            report.steps.add(PhoneAuthStepLog(
-              stepNumber: 3,
-              title: 'Solution 2 [iOS] : Ré-enregistrement APNs + Retry Flutter',
-              status: 'FAILED',
-              durationMs: sw3.elapsedMilliseconds,
-              details:
-                  'APNs=$targetApnsType (hasToken=${apnsSnap['hasApnsToken']}, err=${apnsSnap['apnsRegistrationError']})',
-              errorCode: res.errorCode,
-              errorMessage: res.errorMessage,
-              rawError: res.rawError,
-            ));
-          }
-        } catch (e) {
-          report.steps.add(PhoneAuthStepLog(
-            stepNumber: 3,
-            title: 'Solution 2 [iOS] : Ré-enregistrement APNs + Retry Flutter',
-            status: 'FAILED',
-            durationMs: sw3.elapsedMilliseconds,
-            details: 'Exception inattendue dans Solution 2',
-            errorCode: 'step3-exception',
-            errorMessage: e.toString(),
-            rawError: e.toString(),
-          ));
-        }
-      }
-    }
-
-    // =========================================================================
-    // ÉTAPE 4 : Solution 3 [iOS] — Appel natif Swift PhoneAuthProvider + SceneAuthUIDelegate
-    // =========================================================================
-    if (!report.succeeded) {
-      final sw4 = Stopwatch()..start();
-      if (!PhoneAuthDiagnosticService.isIOS || hardStop) {
-        report.steps.add(PhoneAuthStepLog(
-          stepNumber: 4,
-          title: 'Solution 3 [iOS] : Appel natif Swift + SceneAuthUIDelegate',
-          status: 'SKIPPED',
-          durationMs: 0,
-          details: hardStop
-              ? 'Ignorée suite à erreur bloquante.'
-              : 'Plateforme non-iOS.',
-        ));
-      } else {
-        onProgress?.call('Étape 5/6 : Solution 3 (Natif Swift + SceneUI)...');
-        try {
-          const targetApnsType = kReleaseMode ? 'prod' : 'sandbox';
-          final nativeRes = await PhoneAuthDiagnosticService.nativeVerifyPhoneNumber(
-            phoneNumber: formattedPhone,
-            useSceneUIDelegate: true,
-            apnsTokenType: targetApnsType,
-          );
-          final vid = (nativeRes['verificationId'] ?? '').toString().trim();
-          if (nativeRes['success'] == true && vid.isNotEmpty) {
-            _verificationId = vid;
-            report.succeeded = true;
-            report.winningStrategy = 'Solution 3 (Natif Swift + SceneAuthUIDelegate)';
-            report.steps.add(PhoneAuthStepLog(
-              stepNumber: 4,
-              title: 'Solution 3 [iOS] : Appel natif Swift + SceneAuthUIDelegate',
-              status: 'OK',
-              durationMs: sw4.elapsedMilliseconds,
-              details: 'codeSent natif reçu (verificationId len=${vid.length})',
-            ));
-          } else {
-            final domain = nativeRes['domain']?.toString() ?? 'Unknown';
-            final code = nativeRes['code']?.toString() ?? 'N/A';
-            final msg = nativeRes['message']?.toString() ?? 'Erreur native';
-            final userInfo = nativeRes['userInfo']?.toString() ?? '{}';
-            final underlying = nativeRes['underlying']?.toString() ?? 'none';
-            final raw = 'domain=$domain | code=$code | underlying=$underlying | userInfo=$userInfo';
-            hardStop = _isHardStopPhoneError(code, msg, raw);
-            final combinedUpper = '$domain $code $msg $userInfo $underlying'.toUpperCase();
-            retryAlternativeApns = !hardStop &&
-                (combinedUpper.contains('17048') ||
-                    combinedUpper.contains('INVALID_APP_CREDENTIAL') ||
-                    combinedUpper.contains('APP_VERIFICATION') ||
-                    combinedUpper.contains('17999') ||
-                    combinedUpper.contains('INTERNAL_ERROR') ||
-                    combinedUpper.contains('INTERNAL-ERROR'));
-
-            report.steps.add(PhoneAuthStepLog(
-              stepNumber: 4,
-              title: 'Solution 3 [iOS] : Appel natif Swift + SceneAuthUIDelegate',
-              status: 'FAILED',
-              durationMs: sw4.elapsedMilliseconds,
-              details: 'NSError natif capturé ($domain code=$code)',
-              errorCode: '$domain:$code',
-              errorMessage: msg,
-              rawError: raw,
-            ));
-          }
-        } catch (e) {
-          report.steps.add(PhoneAuthStepLog(
-            stepNumber: 4,
-            title: 'Solution 3 [iOS] : Appel natif Swift + SceneAuthUIDelegate',
-            status: 'FAILED',
-            durationMs: sw4.elapsedMilliseconds,
-            details: 'Exception pont MethodChannel Swift',
-            errorCode: 'step4-exception',
-            errorMessage: e.toString(),
-            rawError: e.toString(),
-          ));
-        }
-      }
-    }
-
-    // =========================================================================
-    // ÉTAPE 5 : Solution 4 [iOS] — Fallback natif Swift avec type APNs alternatif
-    // =========================================================================
-    if (!report.succeeded) {
-      final sw5 = Stopwatch()..start();
-      if (!PhoneAuthDiagnosticService.isIOS || hardStop || !retryAlternativeApns) {
-        report.steps.add(PhoneAuthStepLog(
-          stepNumber: 5,
-          title: 'Solution 4 [iOS] : Fallback APNs alternatif (sandbox/prod)',
-          status: 'SKIPPED',
-          durationMs: 0,
-          details: hardStop
-              ? 'Ignorée suite à erreur serveur/numéro bloquante.'
-              : (!PhoneAuthDiagnosticService.isIOS
-                  ? 'Plateforme non-iOS.'
-                  : 'Aucune erreur de type APNs/17048 détectée à l’étape 4.'),
-        ));
-      } else {
-        const altApnsType = kReleaseMode ? 'sandbox' : 'prod';
-        onProgress?.call('Étape 6/6 : Solution 4 (APNs $altApnsType)...');
-        try {
-          final nativeRes = await PhoneAuthDiagnosticService.nativeVerifyPhoneNumber(
-            phoneNumber: formattedPhone,
-            useSceneUIDelegate: true,
-            apnsTokenType: altApnsType,
-          );
-          final vid = (nativeRes['verificationId'] ?? '').toString().trim();
-          if (nativeRes['success'] == true && vid.isNotEmpty) {
-            _verificationId = vid;
-            report.succeeded = true;
-            report.winningStrategy = 'Solution 4 (Natif Swift APNs alternatif: $altApnsType)';
-            report.steps.add(PhoneAuthStepLog(
-              stepNumber: 5,
-              title: 'Solution 4 [iOS] : Fallback APNs alternatif ($altApnsType)',
-              status: 'OK',
-              durationMs: sw5.elapsedMilliseconds,
-              details: 'codeSent reçu avec APNs type=$altApnsType (verificationId len=${vid.length})',
-            ));
-          } else {
-            final domain = nativeRes['domain']?.toString() ?? 'Unknown';
-            final code = nativeRes['code']?.toString() ?? 'N/A';
-            final msg = nativeRes['message']?.toString() ?? 'Erreur native';
-            final userInfo = nativeRes['userInfo']?.toString() ?? '{}';
-            final underlying = nativeRes['underlying']?.toString() ?? 'none';
-            report.steps.add(PhoneAuthStepLog(
-              stepNumber: 5,
-              title: 'Solution 4 [iOS] : Fallback APNs alternatif ($altApnsType)',
-              status: 'FAILED',
-              durationMs: sw5.elapsedMilliseconds,
-              details: 'NSError natif avec APNs $altApnsType ($domain code=$code)',
-              errorCode: '$domain:$code',
-              errorMessage: msg,
-              rawError: 'domain=$domain | code=$code | underlying=$underlying | userInfo=$userInfo',
-            ));
-          }
-        } catch (e) {
-          report.steps.add(PhoneAuthStepLog(
-            stepNumber: 5,
-            title: 'Solution 4 [iOS] : Fallback APNs alternatif ($altApnsType)',
-            status: 'FAILED',
-            durationMs: sw5.elapsedMilliseconds,
-            details: 'Exception Solution 4',
-            errorCode: 'step5-exception',
-            errorMessage: e.toString(),
-            rawError: e.toString(),
-          ));
-        }
-      }
-    }
-
-    // =========================================================================
-    // ÉTAPE 6 : Consolidation logs natifs + Diagnostic + Firestore + Email
-    // =========================================================================
-    onProgress?.call('Finalisation & envoi du rapport diagnostic...');
-    final sw6 = Stopwatch()..start();
-    try {
-      if (PhoneAuthDiagnosticService.isIOS) {
-        try {
-          report.nativeAfter = await PhoneAuthDiagnosticService.getNativeDiagnostics();
-        } catch (_) {}
-      }
-
-      final diag = PhoneAuthDiagnosticService.diagnoseReport(report);
-      report.detectedRootCauseCode = diag.code;
-      report.detectedRootCauseSummary = diag.summary;
-      report.userFriendlyMessage = diag.userMessage;
-
-      final usedFallbackSuccess = report.succeeded &&
-          report.winningStrategy != null &&
-          !report.winningStrategy!.startsWith('Solution 1');
-
-      if (!report.succeeded || usedFallbackSuccess) {
-        await PhoneAuthDiagnosticService.persistAndSendReport(report);
-        report.steps.add(PhoneAuthStepLog(
-          stepNumber: 6,
-          title: 'Enregistrement Firestore & Envoi e-mail diagnostic',
-          status: (report.firestoreSaved || report.emailSent) ? 'OK' : 'WARNING',
-          durationMs: sw6.elapsedMilliseconds,
-          details:
-              'Firestore=${report.firestoreSaved ? "OK" : "ÉCHEC(${report.firestoreError})"} | Email(${MailService.techEmail})=${report.emailSent ? "OK" : "ÉCHEC(${report.emailError})"}',
-        ));
-      } else {
-        report.steps.add(PhoneAuthStepLog(
-          stepNumber: 6,
-          title: 'Enregistrement Firestore & Envoi e-mail diagnostic',
-          status: 'SKIPPED',
-          durationMs: sw6.elapsedMilliseconds,
-          details: 'Solution 1 réussie directement — aucun envoi d’alerte nécessaire.',
-        ));
-      }
-    } catch (e) {
-      report.steps.add(PhoneAuthStepLog(
-        stepNumber: 6,
-        title: 'Enregistrement Firestore & Envoi e-mail diagnostic',
-        status: 'WARNING',
-        durationMs: sw6.elapsedMilliseconds,
-        details: 'Erreur lors de la télémétrie: $e',
-      ));
-      if (report.userFriendlyMessage.isEmpty) {
-        report.userFriendlyMessage = "Impossible d'envoyer le SMS de validation.";
-      }
-    }
-
-    if (report.succeeded) {
-      return report;
-    }
-
-    throw PhoneAuthDiagnosticException(report.userFriendlyMessage, report);
-  }
-
-  Future<({bool ok, String? errorCode, String? errorMessage, String? rawError, String? details})>
-      _attemptFlutterVerifyPhoneNumber(
-    String formattedPhone, {
-    Duration completerTimeout = const Duration(seconds: 25),
-  }) async {
-    final completer =
-        Completer<({bool ok, String? errorCode, String? errorMessage, String? rawError, String? details})>();
+    final completer = Completer<void>();
 
     try {
       await _firebaseAuth.verifyPhoneNumber(
@@ -622,88 +182,40 @@ class AuthService {
           } catch (_) {}
         },
         verificationFailed: (auth.FirebaseAuthException e) {
-          // ignore: avoid_print
-          print("FirebaseAuth PhoneAuth verificationFailed: code=${e.code}, message=${e.message}");
           if (!completer.isCompleted) {
-            completer.complete((
-              ok: false,
-              errorCode: e.code,
-              errorMessage: e.message ?? _handleAuthException(e).toString().replaceAll('Exception: ', ''),
-              rawError: 'FirebaseAuthException(code=${e.code}, plugin=${e.plugin}, message=${e.message})',
-              details: 'Callback verificationFailed reçu',
-            ));
+            completer.completeError(_handleAuthException(e));
           }
         },
         codeSent: (String verificationId, int? resendToken) {
-          // ignore: avoid_print
-          print("FirebaseAuth PhoneAuth codeSent: verificationId=$verificationId");
           _verificationId = verificationId;
           if (!completer.isCompleted) {
-            completer.complete((
-              ok: true,
-              errorCode: null,
-              errorMessage: null,
-              rawError: null,
-              details: 'codeSent reçu (verificationId len=${verificationId.length}, resendToken=$resendToken)',
-            ));
+            completer.complete();
           }
         },
         codeAutoRetrievalTimeout: (String verificationId) {
-          // ignore: avoid_print
-          print("FirebaseAuth PhoneAuth codeAutoRetrievalTimeout: verificationId=$verificationId");
           if (verificationId.isNotEmpty) {
             _verificationId = verificationId;
           }
         },
       );
     } on auth.FirebaseAuthException catch (e) {
-      // ignore: avoid_print
-      print("FirebaseAuth verifyPhoneNumber synchronous FirebaseAuthException: ${e.code} ${e.message}");
       if (!completer.isCompleted) {
-        completer.complete((
-          ok: false,
-          errorCode: e.code,
-          errorMessage: e.message ?? 'FirebaseAuthException synchronisée',
-          rawError: 'Sync FirebaseAuthException(code=${e.code}, plugin=${e.plugin}, message=${e.message})',
-          details: 'Exception synchrone FlutterFire',
-        ));
+        completer.completeError(_handleAuthException(e));
       }
     } catch (e) {
-      // ignore: avoid_print
-      print("FirebaseAuth verifyPhoneNumber synchronous error: $e");
       if (!completer.isCompleted) {
-        completer.complete((
-          ok: false,
-          errorCode: 'sync-error',
-          errorMessage: e.toString(),
-          rawError: 'Sync error: $e',
-          details: 'Exception synchrone générique',
-        ));
+        completer.completeError(e);
       }
     }
 
     return completer.future.timeout(
-      completerTimeout,
-      onTimeout: () => (
-        ok: false,
-        errorCode: 'timeout',
-        errorMessage: "Délai d'attente dépassé (${completerTimeout.inSeconds}s) sans réponse codeSent ni verificationFailed.",
-        rawError: 'Timeout after ${completerTimeout.inSeconds}s',
-        details: 'Aucun callback reçu avant ${completerTimeout.inSeconds}s',
-      ),
+      const Duration(seconds: 45),
+      onTimeout: () {
+        throw Exception(
+          "Le délai d'envoi du code SMS a expiré. Veuillez vérifier votre connexion ou réessayer.",
+        );
+      },
     );
-  }
-
-  static bool _isHardStopPhoneError(String? code, String? message, String? raw) {
-    final upper = '${code ?? ""} ${message ?? ""} ${raw ?? ""}'.toUpperCase();
-    return upper.contains('BILLING_NOT_ENABLED') ||
-        upper.contains('BILLING-NOT-ENABLED') ||
-        upper.contains('INVALID-PHONE-NUMBER') ||
-        upper.contains('INVALID_PHONE_NUMBER') ||
-        upper.contains('QUOTA-EXCEEDED') ||
-        upper.contains('QUOTA_EXCEEDED') ||
-        upper.contains('TOO-MANY-REQUESTS') ||
-        upper.contains('TOO_MANY_REQUESTS');
   }
 
   // Vérification de l'OTP saisi par l'utilisateur

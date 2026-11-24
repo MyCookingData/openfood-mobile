@@ -6,20 +6,32 @@ import 'package:openfood_models/openfood_models.dart';
 import 'upsell_modal.dart';
 import '../utils/cart_handler.dart';
 import '../utils/restaurant_helper.dart';
+import '../utils/ui_feedback.dart';
 
 class PersoModal extends StatefulWidget {
   final ProductModel product;
   final String emoji;
   final List<Color>? gradient;
+  final bool? isRestaurantOpen;
+  final String? closedStatusMessage;
 
   const PersoModal({
     super.key,
     required this.product,
     required this.emoji,
     this.gradient,
+    this.isRestaurantOpen,
+    this.closedStatusMessage,
   });
 
-  static void show(BuildContext context, {required ProductModel product, required String emoji, List<Color>? gradient}) {
+  static void show(
+    BuildContext context, {
+    required ProductModel product,
+    required String emoji,
+    List<Color>? gradient,
+    bool? isRestaurantOpen,
+    String? closedStatusMessage,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -28,6 +40,8 @@ class PersoModal extends StatefulWidget {
         product: product,
         emoji: emoji,
         gradient: gradient,
+        isRestaurantOpen: isRestaurantOpen,
+        closedStatusMessage: closedStatusMessage,
       ),
     );
   }
@@ -41,6 +55,9 @@ class _PersoModalState extends State<PersoModal> {
   final Map<int, List<int>> _selections = {};
   bool _hasAttemptedSubmit = false;
   final ScrollController _scrollController = ScrollController();
+  late bool _isRestaurantOpen;
+  late bool _checkingOpenStatus;
+  late String _closedStatusMessage;
 
   @override
   void dispose() {
@@ -51,6 +68,15 @@ class _PersoModalState extends State<PersoModal> {
   @override
   void initState() {
     super.initState();
+    _closedStatusMessage = (widget.closedStatusMessage ?? '').trim();
+    if (widget.isRestaurantOpen != null) {
+      _isRestaurantOpen = widget.isRestaurantOpen!;
+      _checkingOpenStatus = false;
+    } else {
+      _isRestaurantOpen = true;
+      _checkingOpenStatus = true;
+      _loadRestaurantOpenStatus();
+    }
     // Initialize selections for each modifier group
     for (int i = 0; i < widget.product.modifierGroups.length; i++) {
       _selections[i] = [];
@@ -63,6 +89,19 @@ class _PersoModalState extends State<PersoModal> {
         }
       }
     }
+  }
+
+  Future<void> _loadRestaurantOpenStatus() async {
+    final target = widget.product.restaurantId.trim().isNotEmpty
+        ? widget.product.restaurantId
+        : widget.product.restaurantName;
+    final status = await RestaurantHelper.fetchRestaurantOpenStatus(target);
+    if (!mounted) return;
+    setState(() {
+      _isRestaurantOpen = status.isOpen;
+      _closedStatusMessage = status.nextChangeText.trim();
+      _checkingOpenStatus = false;
+    });
   }
 
   double get _totalExtrasHT {
@@ -91,6 +130,19 @@ class _PersoModalState extends State<PersoModal> {
   }
 
   void _addAndUpsell() {
+    if (_checkingOpenStatus) return;
+    if (!_isRestaurantOpen) {
+      final restoLabel = (widget.product.restaurantName != null && !RestaurantHelper.isRawId(widget.product.restaurantName!))
+          ? widget.product.restaurantName!
+          : RestaurantHelper.cleanRestaurantName(widget.product.restaurantId);
+      final suffix = _closedStatusMessage.isNotEmpty ? ' ($_closedStatusMessage)' : '';
+      UiFeedback.showWarning(
+        context,
+        "$restoLabel est actuellement fermé$suffix. Impossible de commander pour le moment.",
+      );
+      return;
+    }
+
     if (!_isSelectionValid()) {
       setState(() {
         _hasAttemptedSubmit = true;
@@ -358,35 +410,78 @@ class _PersoModalState extends State<PersoModal> {
                       const SizedBox(height: 24),
                       
                       // Submit Btn
-                      GestureDetector(
-                        onTap: isValid ? _addAndUpsell : () {
-                          _addAndUpsell(); // Appelons la méthode pour gérer le visuel d'erreur
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
+                      if (_checkingOpenStatus)
+                        Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            gradient: isValid ? const LinearGradient(
-                              colors: [AppTheme.green, Color(0xFF145C26)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ) : null,
-                            color: isValid ? null : AppTheme.surface3,
+                            color: AppTheme.surface3,
                             borderRadius: BorderRadius.circular(18),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          child: const Center(
+                            child: Text(
+                              "Vérification des horaires...",
+                              style: TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600, fontSize: 14),
+                            ),
+                          ),
+                        )
+                      else if (!_isRestaurantOpen)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2C0B0E),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.45)),
+                          ),
+                          child: Column(
                             children: [
-                              Text("Ajouter au panier", style: AppTheme.titleStyle.copyWith(fontSize: 16, color: isValid ? AppTheme.cream : AppTheme.muted)),
-                              Text(
-                                "Total : ${_finalTotalTTC.toStringAsFixed(2).replaceAll('.', ',')} €",
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isValid ? AppTheme.cream : AppTheme.muted),
+                              const Text(
+                                "🔒 Restaurant fermé — Commande indisponible",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Color(0xFFFFB4AB), fontWeight: FontWeight.bold, fontSize: 14),
                               ),
+                              if (_closedStatusMessage.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  _closedStatusMessage,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Color(0xFFFF8A80), fontSize: 12),
+                                ),
+                              ],
                             ],
                           ),
+                        )
+                      else
+                        GestureDetector(
+                          onTap: isValid ? _addAndUpsell : () {
+                            _addAndUpsell(); // Appelons la méthode pour gérer le visuel d'erreur
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              gradient: isValid ? const LinearGradient(
+                                colors: [AppTheme.green, Color(0xFF145C26)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ) : null,
+                              color: isValid ? null : AppTheme.surface3,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("Ajouter au panier", style: AppTheme.titleStyle.copyWith(fontSize: 16, color: isValid ? AppTheme.cream : AppTheme.muted)),
+                                Text(
+                                  "Total : ${_finalTotalTTC.toStringAsFixed(2).replaceAll('.', ',')} €",
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isValid ? AppTheme.cream : AppTheme.muted),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

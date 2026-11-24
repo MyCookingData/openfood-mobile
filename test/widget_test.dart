@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openfood_models/openfood_models.dart';
+import 'package:openfood_mobile/services/auth_service.dart';
+import 'package:openfood_mobile/utils/restaurant_helper.dart';
 
 void main() {
   group('OpeningHoursHelper Tests', () {
@@ -89,6 +91,39 @@ void main() {
       );
       final json = resto.toJson();
       expect(json['startingPrice'], 9.0);
+    });
+  });
+
+  group('AuthService.formatPhoneNumber Tests', () {
+    test('normalizes Martinique, Guadeloupe, Guyane, and France numbers', () {
+      expect(AuthService.formatPhoneNumber('0696 12 34 56'), '+596696123456');
+      expect(AuthService.formatPhoneNumber('+596 0696 12 34 56'), '+596696123456');
+      expect(AuthService.formatPhoneNumber('0690 11 22 33'), '+590690112233');
+      expect(AuthService.formatPhoneNumber('0694 44 55 66'), '+594694445566');
+      expect(AuthService.formatPhoneNumber('06 12 34 56 78'), '+33612345678');
+    });
+  });
+
+  group('RestaurantHelper.closedOrderMessage Tests', () {
+    test('formats message with nextChangeText when present', () {
+      const status = RestaurantOpenStatus(
+        isOpen: false,
+        shortStatus: 'Fermé',
+        detailStatus: 'Fermé · ouvre à 18h30',
+        nextChangeText: 'ouvre à 18h30',
+      );
+      final msg = RestaurantHelper.closedOrderMessage('QG StreetFood', status);
+      expect(msg, 'QG StreetFood est actuellement fermé (ouvre à 18h30). Impossible de commander pour le moment.');
+    });
+
+    test('formats message cleanly when nextChangeText is empty or name is empty', () {
+      const status = RestaurantOpenStatus(
+        isOpen: false,
+        shortStatus: 'Fermé',
+        detailStatus: 'Fermé',
+      );
+      final msg = RestaurantHelper.closedOrderMessage('', status);
+      expect(msg, 'Ce restaurant est actuellement fermé. Impossible de commander pour le moment.');
     });
   });
 }

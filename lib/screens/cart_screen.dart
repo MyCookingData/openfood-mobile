@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:openfood_models/openfood_models.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import '../../providers/cart_provider.dart';
@@ -7,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'auth/login_screen.dart';
 import '../services/analytics_service.dart';
+import '../utils/restaurant_helper.dart';
 import '../utils/ui_feedback.dart';
 import 'checkout_screen.dart';
 
@@ -19,6 +21,8 @@ class CartScreen extends StatefulWidget {
 
 class _CartScreenState extends State<CartScreen> {
   final DateTime _enteredCartAt = DateTime.now();
+  RestaurantOpenStatus? _restaurantOpenStatus;
+  bool _isCheckingOpenStatus = false;
 
   @override
   void initState() {
@@ -29,6 +33,19 @@ class _CartScreenState extends State<CartScreen> {
       if (loc.selectedAddress != null) {
         cart.updateRealDistance(loc.selectedAddress!.latitude, loc.selectedAddress!.longitude);
       }
+      if (cart.items.isNotEmpty) {
+        _refreshRestaurantStatus(cart.items.values.first.restaurantId);
+      }
+    });
+  }
+
+  Future<void> _refreshRestaurantStatus(String restaurantId) async {
+    if (mounted) setState(() => _isCheckingOpenStatus = true);
+    final status = await RestaurantHelper.fetchRestaurantOpenStatus(restaurantId);
+    if (!mounted) return;
+    setState(() {
+      _restaurantOpenStatus = status;
+      _isCheckingOpenStatus = false;
     });
   }
 
@@ -381,6 +398,7 @@ class _CartScreenState extends State<CartScreen> {
     for (var item in cart.items.values) {
       subTotal += item.subtotal;
     }
+    final bool isClosed = _restaurantOpenStatus != null && !_restaurantOpenStatus!.isOpen;
 
     return Container(
       padding: const EdgeInsets.only(top: 24, left: 24, right: 24, bottom: 40),
@@ -516,53 +534,99 @@ class _CartScreenState extends State<CartScreen> {
             ],
           ),
           const SizedBox(height: 24),
+          if (isClosed)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C0B0E),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.45)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_clock_outlined, color: Color(0xFFFF6B6B), size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      RestaurantHelper.closedOrderMessage(cart.restaurantName, _restaurantOpenStatus!),
+                      style: const TextStyle(color: Color(0xFFFFB4AB), fontSize: 12, fontWeight: FontWeight.w600, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // CTA
           ElevatedButton(
-            onPressed: cart.deliveryFee < 0 ? null : () {
+            onPressed: (cart.deliveryFee < 0 || isClosed || _isCheckingOpenStatus) ? null : () async {
               HapticFeedback.lightImpact();
-              if (cart.items.isNotEmpty) {
-                if (FirebaseAuth.instance.currentUser == null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const LoginScreen()),
-                  );
-                  UiFeedback.showInfo(
-                    context,
-                    "Vous devez vous connecter ou créer un compte pour passer commande.",
-                  );
-                } else {
-                  AnalyticsService.logCheckoutFunnel(
-                    "cart_reviewed", 
-                    DateTime.now().difference(_enteredCartAt).inSeconds
-                  );
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const CheckoutScreen()),
-                  );
-                }
-              } else {
+              if (cart.items.isEmpty) {
                 UiFeedback.showWarning(
                   context,
                   "Votre panier est vide.",
                 );
+                return;
               }
+              if (FirebaseAuth.instance.currentUser == null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                );
+                UiFeedback.showInfo(
+                  context,
+                  "Vous devez vous connecter ou créer un compte pour passer commande.",
+                );
+                return;
+              }
+
+              setState(() => _isCheckingOpenStatus = true);
+              final liveStatus = await RestaurantHelper.fetchRestaurantOpenStatus(
+                cart.items.values.first.restaurantId,
+              );
+              if (!context.mounted) return;
+              if (mounted) {
+                setState(() {
+                  _restaurantOpenStatus = liveStatus;
+                  _isCheckingOpenStatus = false;
+                });
+              }
+              if (!liveStatus.isOpen) {
+                UiFeedback.showError(
+                  context,
+                  RestaurantHelper.closedOrderMessage(cart.restaurantName, liveStatus),
+                );
+                return;
+              }
+
+              AnalyticsService.logCheckoutFunnel(
+                "cart_reviewed",
+                DateTime.now().difference(_enteredCartAt).inSeconds,
+              );
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CheckoutScreen()),
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.green,
+              disabledBackgroundColor: AppTheme.surface3,
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 56),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               elevation: 4,
               shadowColor: AppTheme.green.withValues(alpha: 0.5),
             ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text("Passer au paiement", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                SizedBox(width: 8),
-                Icon(Icons.arrow_forward_rounded, size: 20),
-              ],
-            ),
+            child: isClosed
+                ? const Text("Restaurant fermé", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.muted))
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text("Passer au paiement", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                      SizedBox(width: 8),
+                      Icon(Icons.arrow_forward_rounded, size: 20),
+                    ],
+                  ),
           )
         ],
       ),

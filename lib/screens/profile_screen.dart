@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
@@ -10,9 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/location_provider.dart';
 import '../providers/cart_provider.dart';
-import '../services/mail_service.dart';
 import '../services/notification_service.dart';
-import '../services/phone_auth_diagnostic_service.dart';
 import 'address_picker_screen.dart';
 import 'auth/login_screen.dart' as auth_screen;
 import 'legal/legal_viewer_screen.dart';
@@ -33,8 +29,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isPhoneValidated = false;
   String _validatedPhone = '';
   bool _isSendingOtp = false;
-  String _otpProgressLabel = '';
-  PhoneAuthDiagnosticReport? _lastPhoneDiagnosticReport;
   bool _isSendingEmail = false;
   int _cooldownSeconds = 0;
   Timer? _cooldownTimer;
@@ -224,224 +218,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    setState(() {
-      _isSendingOtp = true;
-      _otpProgressLabel = 'Initialisation du diagnostic...';
-    });
+    setState(() => _isSendingOtp = true);
 
     try {
-      final report = await _authService.sendOTPWithDiagnostics(
-        formattedPhone,
-        onProgress: (label) {
-          if (mounted) {
-            setState(() => _otpProgressLabel = label);
-          }
-        },
-      );
+      await _authService.sendOTP(formattedPhone);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('last_otp_sent_ms_$formattedPhone', DateTime.now().millisecondsSinceEpoch);
       _startCooldown(180);
 
       if (mounted) {
-        setState(() {
-          _isSendingOtp = false;
-          _otpProgressLabel = '';
-          _lastPhoneDiagnosticReport = report;
-        });
+        setState(() => _isSendingOtp = false);
         _showOtpVerificationDialog(formattedPhone);
-      }
-    } on PhoneAuthDiagnosticException catch (diagErr) {
-      if (mounted) {
-        setState(() {
-          _isSendingOtp = false;
-          _otpProgressLabel = '';
-          _lastPhoneDiagnosticReport = diagErr.report;
-        });
-        UiFeedback.showError(context, diagErr.message);
-        _showPhoneDiagnosticDialog(diagErr.report);
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isSendingOtp = false;
-          _otpProgressLabel = '';
-        });
+        setState(() => _isSendingOtp = false);
         UiFeedback.showError(
           context,
           e.toString().replaceAll("Exception: ", ""),
         );
       }
     }
-  }
-
-  void _showPhoneDiagnosticDialog(PhoneAuthDiagnosticReport report) {
-    final bool isSuccess = report.succeeded;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: AppTheme.border2),
-        ),
-        title: Row(
-          children: [
-            Icon(
-              isSuccess ? Icons.check_circle_rounded : Icons.bug_report_rounded,
-              color: isSuccess ? AppTheme.greenXl : AppTheme.redL,
-              size: 24,
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text(
-                "Diagnostic SMS / Phone Auth",
-                style: TextStyle(color: AppTheme.cream, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: (isSuccess ? AppTheme.green : AppTheme.redL).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: (isSuccess ? AppTheme.green : AppTheme.redL).withValues(alpha: 0.45),
-                    ),
-                  ),
-                  child: Text(
-                    "Cause : ${report.detectedRootCauseCode}",
-                    style: TextStyle(
-                      color: isSuccess ? AppTheme.greenXl : AppTheme.redL,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  report.detectedRootCauseSummary,
-                  style: const TextStyle(color: AppTheme.cream, fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  report.userFriendlyMessage,
-                  style: const TextStyle(color: AppTheme.muted, fontSize: 12, height: 1.4),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    _buildTelemetryPill(
-                      "Email auto (${MailService.techEmail})",
-                      report.emailSent,
-                    ),
-                    _buildTelemetryPill(
-                      "Log Firestore",
-                      report.firestoreSaved,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  constraints: const BoxConstraints(maxHeight: 240),
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.bg,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.surface3),
-                  ),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      report.toPlainText(),
-                      style: const TextStyle(
-                        color: AppTheme.cream,
-                        fontFamily: 'monospace',
-                        fontSize: 10.5,
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: report.toPlainText()));
-              if (ctx.mounted) {
-                UiFeedback.showSuccess(ctx, "Logs copiés dans le presse-papiers.");
-              }
-            },
-            icon: const Icon(Icons.copy_rounded, size: 16, color: AppTheme.greenXl),
-            label: const Text("Copier les logs", style: TextStyle(color: AppTheme.greenXl)),
-          ),
-          TextButton.icon(
-            onPressed: () async {
-              final subject = Uri.encodeComponent(
-                "[OpenFood PhoneAuth Diag] ${report.detectedRootCauseCode} — ${report.formattedPhone}",
-              );
-              final body = Uri.encodeComponent(report.toPlainText());
-              final uri = Uri.parse("mailto:${MailService.techEmail}?subject=$subject&body=$body");
-              try {
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri);
-                } else if (ctx.mounted) {
-                  UiFeedback.showWarning(ctx, "Aucune application Mail détectée. Copiez les logs.");
-                }
-              } catch (_) {}
-            },
-            icon: const Icon(Icons.mail_outline_rounded, size: 16, color: AppTheme.gold),
-            label: const Text("Envoyer via Mail", style: TextStyle(color: AppTheme.gold)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Fermer", style: TextStyle(color: AppTheme.muted)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTelemetryPill(String label, bool ok) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: (ok ? AppTheme.green : AppTheme.gold).withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: (ok ? AppTheme.green : AppTheme.gold).withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            ok ? Icons.check_circle_outline_rounded : Icons.info_outline_rounded,
-            size: 14,
-            color: ok ? AppTheme.greenXl : AppTheme.gold,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            "$label : ${ok ? 'OK' : 'Échec'}",
-            style: TextStyle(
-              color: ok ? AppTheme.greenXl : AppTheme.gold,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showOtpVerificationDialog(String formattedPhone) {
@@ -1030,31 +827,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         ),
                                   label: Text(
                                     _isSendingOtp
-                                        ? (_otpProgressLabel.isNotEmpty ? _otpProgressLabel : "Envoi du SMS...")
+                                        ? "Envoi du SMS..."
                                         : _cooldownSeconds > 0
                                             ? "Demander un code (${_formatCooldown(_cooldownSeconds)})"
                                             : "Valider ce numéro par SMS",
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                         fontWeight: FontWeight.bold, fontSize: 14),
                                   ),
                                   onPressed: (_isSendingOtp || _cooldownSeconds > 0) ? null : _validatePhone,
                                 ),
-
-                                if (_lastPhoneDiagnosticReport != null) ...[
-                                  const SizedBox(height: 6),
-                                  Center(
-                                    child: TextButton.icon(
-                                      onPressed: () => _showPhoneDiagnosticDialog(_lastPhoneDiagnosticReport!),
-                                      icon: const Icon(Icons.bug_report_outlined, size: 16, color: AppTheme.gold),
-                                      label: const Text(
-                                        "Voir le dernier rapport de diagnostic SMS",
-                                        style: TextStyle(color: AppTheme.gold, fontSize: 12, fontWeight: FontWeight.w600),
-                                      ),
-                                    ),
-                                  ),
-                                ],
                                 
 
                                 if (_cooldownSeconds > 0) ...[

@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import 'package:openfood_models/openfood_models.dart';
 
 /// Utilitaire global pour garantir qu'aucun identifiant technique brut
 /// (ex: NRApFNzTuiywlssVQrqs, hash Firestore, UUID) n'apparaisse aux yeux du client.
@@ -117,5 +119,58 @@ class RestaurantHelper {
     } catch (_) {}
 
     return fallback;
+  }
+
+  /// Récupère en direct le statut d'ouverture actuel du restaurant depuis Firestore.
+  static Future<RestaurantOpenStatus> fetchRestaurantOpenStatus(String? restaurantIdOrName) async {
+    const openFallback = RestaurantOpenStatus(
+      isOpen: true,
+      shortStatus: 'Ouvert',
+      detailStatus: 'Ouvert',
+    );
+    if (restaurantIdOrName == null || restaurantIdOrName.trim().isEmpty) {
+      return openFallback;
+    }
+
+    final clean = restaurantIdOrName.split(' · ').first.trim();
+    if (clean.isEmpty) return openFallback;
+
+    try {
+      Map<String, dynamic>? data;
+      final doc = await FirebaseFirestore.instance.collection('restaurants').doc(clean).get();
+      if (doc.exists && doc.data() != null) {
+        data = doc.data()!;
+      } else {
+        final snap = await FirebaseFirestore.instance
+            .collection('restaurants')
+            .where('name', isEqualTo: clean)
+            .limit(1)
+            .get();
+        if (snap.docs.isNotEmpty) {
+          data = snap.docs.first.data();
+        }
+      }
+
+      if (data == null) return openFallback;
+
+      Map<String, dynamic>? openingHours;
+      if (data['openingHours'] is Map) {
+        openingHours = Map<String, dynamic>.from(data['openingHours'] as Map);
+      }
+      final manualStatus = data['status']?.toString();
+      return OpeningHoursHelper.getStatus(openingHours, manualStatus: manualStatus);
+    } catch (e) {
+      debugPrint('Erreur vérification horaires restaurant ($clean): $e');
+      return openFallback;
+    }
+  }
+
+  /// Formate un message utilisateur clair lorsqu'un restaurant est fermé.
+  static String closedOrderMessage(String restaurantName, RestaurantOpenStatus status) {
+    final trimmed = restaurantName.trim();
+    final label = trimmed.isNotEmpty ? trimmed : 'Ce restaurant';
+    final nextText = status.nextChangeText.trim();
+    final suffix = nextText.isNotEmpty ? ' ($nextText)' : '';
+    return "$label est actuellement fermé$suffix. Impossible de commander pour le moment.";
   }
 }

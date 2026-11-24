@@ -8,10 +8,10 @@ class BestsellerCard extends StatefulWidget {
   final double price;
   final String emoji;
   final String? imageUrl;
-  final String ordersCount;
   final List<Color> imageGradient;
   final String? badgeText;
   final String? stockWarn;
+  final bool isRestaurantOpen;
   final VoidCallback onAdd;
   final VoidCallback onTap;
 
@@ -22,10 +22,10 @@ class BestsellerCard extends StatefulWidget {
     required this.price,
     this.emoji = '',
     this.imageUrl,
-    required this.ordersCount,
     required this.imageGradient,
     this.badgeText,
     this.stockWarn,
+    this.isRestaurantOpen = true,
     required this.onAdd,
     required this.onTap,
   });
@@ -170,16 +170,6 @@ class _BestsellerCardState extends State<BestsellerCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                   RichText(
-                     text: TextSpan(
-                       style: const TextStyle(fontSize: 10, color: AppTheme.muted),
-                       children: [
-                         TextSpan(text: widget.ordersCount, style: const TextStyle(color: AppTheme.greenXl, fontWeight: FontWeight.bold)),
-                         const TextSpan(text: " aujourd'hui"),
-                       ],
-                     ),
-                   ),
-                   const SizedBox(height: 3),
                    Text(
                      widget.title,
                      style: AppTheme.titleStyle.copyWith(fontSize: 16),
@@ -206,13 +196,21 @@ class _BestsellerCardState extends State<BestsellerCard> {
                          child: Container(
                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                            decoration: BoxDecoration(
-                             color: AppTheme.green,
+                             color: widget.isRestaurantOpen ? AppTheme.green : AppTheme.surface3,
+                             border: widget.isRestaurantOpen ? null : Border.all(color: AppTheme.border2),
                              borderRadius: BorderRadius.circular(999),
                            ),
-                           child: const Row(
+                           child: Row(
                              mainAxisSize: MainAxisSize.min,
                              children: [
-                               Text("+ Ajouter", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                               Text(
+                                 widget.isRestaurantOpen ? "+ Ajouter" : "Fermé",
+                                 style: TextStyle(
+                                   color: widget.isRestaurantOpen ? Colors.white : AppTheme.muted,
+                                   fontSize: 12,
+                                   fontWeight: FontWeight.w700,
+                                 ),
+                               ),
                              ],
                            ),
                          ),
