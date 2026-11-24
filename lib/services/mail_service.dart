@@ -2,6 +2,8 @@ import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 
 class MailService {
+  static const String techEmail = 'contact@cookingdata.fr';
+
   static final SmtpServer _smtpServer = SmtpServer(
     'ssl0.ovh.net',
     port: 465,
@@ -101,5 +103,22 @@ class MailService {
       ..html = htmlContent;
 
     await send(message, _smtpServer);
+  }
+
+  /// Envoie un rapport de diagnostic technique (Phone Auth / SMS) par SMTP OVH.
+  static Future<void> sendPhoneAuthDiagnosticEmail({
+    required String subject,
+    required String plainTextBody,
+    required String htmlBody,
+    String recipient = techEmail,
+  }) async {
+    final message = Message()
+      ..from = const Address('noreply@openfood.fr', 'OpenFood Diagnostics')
+      ..recipients.add(recipient)
+      ..subject = subject
+      ..text = plainTextBody
+      ..html = htmlBody;
+
+    await send(message, _smtpServer).timeout(const Duration(seconds: 15));
   }
 }
