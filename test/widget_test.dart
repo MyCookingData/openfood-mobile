@@ -669,4 +669,297 @@ void main() {
       expect(invalid.restaurantReceivesDeliveryFee, isFalse);
     });
   });
+
+  group('TaxDeclarationHelper Tests', () {
+    test('standard Martinique order computes Restaurant CA3 & Platform CA3 figures accurately', () {
+      final order = OrderModel(
+        id: 'ord_tax_1',
+        userId: 'cust_1',
+        restaurantId: 'resto_1',
+        restaurantName: 'Le Grill Créole',
+        status: 3,
+        totalAmount: 29.75,
+        subtotalAmount: 25.00,
+        deliveryFee: 3.50,
+        managementFee: 1.25,
+        smallOrderFee: 0.0,
+        restaurantAmount: 19.50,
+        platformShareAmount: 10.25,
+        feeShareMode: FeeShareModes.commission,
+        driverId: 'drv_1',
+        createdAt: DateTime(2026, 11, 25, 12, 0),
+        deliveredAt: DateTime(2026, 11, 25, 12, 30),
+        items: [
+          {'name': 'Colombo', 'quantity': 2, 'price': 12.50, 'vatRate': 2.1},
+        ],
+      );
+
+      final restoSummary = TaxDeclarationHelper.buildRestaurantTaxSummary(
+        restaurantId: 'resto_1',
+        restaurantName: 'Le Grill Créole',
+        orders: [order],
+        territory: TaxTerritory.dromMartiniqueGuadeloupeReunion,
+        regime: RestaurantTaxRegime.reelAssujettiTva,
+      );
+      expect(restoSummary.ordersCount, 1);
+      expect(restoSummary.taxableSalesTtc, 25.00);
+      expect(restoSummary.taxableSalesHt, 24.49);
+      expect(restoSummary.collectedVatTotal, 0.51);
+      expect(restoSummary.commissionTtc, 5.50);
+      expect(restoSummary.commissionHt, 5.07);
+      expect(restoSummary.deductibleCommissionVat, 0.43);
+      expect(restoSummary.netVatDue, 0.08);
+      expect(restoSummary.netTransferredStripe, 19.50);
+
+      final platformSummary = TaxDeclarationHelper.buildPlatformTaxSummary(
+        orders: [order],
+        restaurantsById: {
+          'resto_1': RestaurantModel(id: 'resto_1', name: 'Le Grill Créole', imageUrl: ''),
+        },
+        territory: TaxTerritory.dromMartiniqueGuadeloupeReunion,
+        deliveryTaxMode: PlatformDeliveryTaxMode.mandatePassThrough,
+      );
+      expect(platformSummary.totalGmvTtc, 29.75);
+      expect(platformSummary.totalRestaurantTransfers, 19.50);
+      expect(platformSummary.totalDriverPayouts, 3.50);
+      expect(platformSummary.openFoodRevenueTtc, 6.75);
+      expect(platformSummary.openFoodRevenueHt, 6.22);
+      expect(platformSummary.openFoodCollectedVat, 0.53);
+      expect(
+        TaxDeclarationHelper.roundCurrency(
+          platformSummary.totalRestaurantTransfers +
+              platformSummary.totalDriverPayouts +
+              platformSummary.openFoodRevenueTtc,
+        ),
+        29.75,
+      );
+    });
+
+    test('multi-rate order with promo discount scales VAT buckets pro-rata cleanly', () {
+      final order = OrderModel(
+        id: 'ord_tax_multi',
+        userId: 'cust_1',
+        restaurantId: 'resto_1',
+        restaurantName: 'Ti Case',
+        status: 3,
+        totalAmount: 31.35,
+        subtotalAmount: 30.00,
+        discountAmount: 3.00,
+        deliveryFee: 2.85,
+        managementFee: 1.50,
+        driverId: 'drv_1',
+        createdAt: DateTime(2026, 11, 25, 13, 0),
+        items: [
+          {'name': 'Plat créole', 'quantity': 1, 'price': 20.00, 'vatRate': 2.1},
+          {'name': 'Bière locale', 'quantity': 1, 'price': 10.00, 'vatRate': 8.5},
+        ],
+      );
+
+      final summary = TaxDeclarationHelper.buildRestaurantTaxSummary(
+        restaurantId: 'resto_1',
+        restaurantName: 'Ti Case',
+        orders: [order],
+        territory: TaxTerritory.dromMartiniqueGuadeloupeReunion,
+        regime: RestaurantTaxRegime.reelAssujettiTva,
+      );
+      expect(summary.taxableSalesTtc, 27.00);
+      expect(summary.vatBreakdown.length, 2);
+
+      final row21 = summary.vatBreakdown.firstWhere((r) => r.vatRate == 2.1);
+      final row85 = summary.vatBreakdown.firstWhere((r) => r.vatRate == 8.5);
+      expect(row21.totalTtc, 18.00);
+      expect(TaxDeclarationHelper.roundCurrency(row21.baseHt + row21.vatAmount), row21.totalTtc);
+      expect(row85.totalTtc, 9.00);
+      expect(TaxDeclarationHelper.roundCurrency(row85.baseHt + row85.vatAmount), row85.totalTtc);
+    });
+
+    test('platformResold delivery mode includes delivery fees in OpenFood CA & VAT', () {
+      final order = OrderModel(
+        id: 'ord_tax_del',
+        userId: 'cust_1',
+        restaurantId: 'resto_1',
+        restaurantName: 'Le Grill',
+        status: 3,
+        totalAmount: 29.75,
+        subtotalAmount: 25.00,
+        deliveryFee: 3.50,
+        managementFee: 1.25,
+        restaurantAmount: 19.50,
+        platformShareAmount: 10.25,
+        feeShareMode: FeeShareModes.commission,
+        driverId: 'drv_1',
+        createdAt: DateTime(2026, 11, 25, 14, 0),
+        items: [
+          {'name': 'Menu', 'quantity': 1, 'price': 25.00, 'vatRate': 2.1},
+        ],
+      );
+
+      final platformSummary = TaxDeclarationHelper.buildPlatformTaxSummary(
+        orders: [order],
+        territory: TaxTerritory.dromMartiniqueGuadeloupeReunion,
+        deliveryTaxMode: PlatformDeliveryTaxMode.platformResold,
+      );
+      expect(platformSummary.includedDeliveryTtc, 3.50);
+      expect(platformSummary.openFoodRevenueTtc, 10.25);
+    });
+
+    test('franchise en base and micro-entreprise regimes compute zero VAT and URSSAF estimates', () {
+      final order = OrderModel(
+        id: 'ord_tax_micro',
+        userId: 'cust_1',
+        restaurantId: 'resto_1',
+        restaurantName: 'Snack Léo',
+        status: 3,
+        totalAmount: 29.75,
+        subtotalAmount: 25.00,
+        deliveryFee: 3.50,
+        managementFee: 1.25,
+        driverId: 'drv_1',
+        createdAt: DateTime(2026, 11, 25, 15, 0),
+        items: [
+          {'name': 'Bokits', 'quantity': 2, 'price': 12.50, 'vatRate': 2.1},
+        ],
+      );
+
+      final franchise = TaxDeclarationHelper.buildRestaurantTaxSummary(
+        restaurantId: 'resto_1',
+        restaurantName: 'Snack Léo',
+        orders: [order],
+        regime: RestaurantTaxRegime.franchiseBaseTva,
+      );
+      expect(franchise.collectedVatTotal, 0.0);
+      expect(franchise.netVatDue, 0.0);
+
+      final micro = TaxDeclarationHelper.buildRestaurantTaxSummary(
+        restaurantId: 'resto_1',
+        restaurantName: 'Snack Léo',
+        orders: [order],
+        regime: RestaurantTaxRegime.microEntrepriseVente,
+        includeVersementLiberatoire: true,
+      );
+      expect(micro.collectedVatTotal, 0.0);
+      expect(micro.estimatedUrssaf, 3.08);
+      expect(micro.estimatedVersementLiberatoire, 0.25);
+      expect(micro.totalEstimatedMicroTaxes, 3.33);
+    });
+
+    test('status filtering excludes pending (0) and cancelled (4), counts cancelled, and optionally includes in-progress', () {
+      OrderModel withStatus(String id, int status) => OrderModel(
+            id: id,
+            userId: 'cust_1',
+            restaurantId: 'r_1',
+            restaurantName: 'Resto',
+            status: status,
+            totalAmount: 20.0,
+            subtotalAmount: 20.0,
+            createdAt: DateTime(2026, 11, 25, 16, 0),
+            items: [
+              {'name': 'Plat', 'quantity': 1, 'price': 20.0, 'vatRate': 2.1},
+            ],
+          );
+
+      final orders = [
+        withStatus('o_pending', 0),
+        withStatus('o_prep', 1),
+        withStatus('o_route', 2),
+        withStatus('o_done', 3),
+        withStatus('o_cancel1', 4),
+        withStatus('o_cancel2', 4),
+      ];
+
+      final deliveredOnly = TaxDeclarationHelper.buildRestaurantTaxSummary(
+        restaurantId: 'r_1',
+        restaurantName: 'Resto',
+        orders: orders,
+        includeInProgress: false,
+      );
+      expect(deliveredOnly.ordersCount, 1);
+      expect(deliveredOnly.cancelledOrdersCount, 2);
+
+      final withInProgress = TaxDeclarationHelper.buildRestaurantTaxSummary(
+        restaurantId: 'r_1',
+        restaurantName: 'Resto',
+        orders: orders,
+        includeInProgress: true,
+      );
+      expect(withInProgress.ordersCount, 3);
+      expect(withInProgress.cancelledOrdersCount, 2);
+    });
+
+    test('legacy order missing vatRate/priceHT/deliveryFee/restaurantAmount falls back cleanly without NaN', () {
+      final legacy = OrderModel(
+        id: 'ord_legacy_tax',
+        userId: 'cust_1',
+        restaurantId: 'r_1',
+        restaurantName: 'Ancien Resto',
+        status: 3,
+        totalAmount: 24.00,
+        createdAt: DateTime(2026, 11, 10, 12, 0),
+        items: [
+          {'name': 'Ancien plat', 'quantity': 2, 'price': 10.00},
+        ],
+      );
+
+      final summary = TaxDeclarationHelper.buildRestaurantTaxSummary(
+        restaurantId: 'r_1',
+        restaurantName: 'Ancien Resto',
+        orders: [legacy],
+        territory: TaxTerritory.dromMartiniqueGuadeloupeReunion,
+        regime: RestaurantTaxRegime.reelAssujettiTva,
+      );
+      expect(summary.ordersCount, 1);
+      expect(summary.taxableSalesTtc, 20.00);
+      expect(summary.taxableSalesHt.isNaN, isFalse);
+      expect(summary.collectedVatTotal.isNaN, isFalse);
+      expect(summary.netTransferredStripe, 15.60);
+    });
+
+    test('restaurant and platform tax CSV exports include UTF-8 BOM, semicolon, decimal comma, and amounts', () {
+      final order = OrderModel(
+        id: 'csvtax001',
+        userId: 'cust_1',
+        restaurantId: 'r_1',
+        restaurantName: 'Chez Paul',
+        status: 3,
+        totalAmount: 29.75,
+        subtotalAmount: 25.00,
+        deliveryFee: 3.50,
+        managementFee: 1.25,
+        restaurantAmount: 19.50,
+        platformShareAmount: 10.25,
+        feeShareMode: FeeShareModes.commission,
+        driverId: 'drv_1',
+        createdAt: DateTime(2026, 11, 27, 12, 0),
+        deliveredAt: DateTime(2026, 11, 27, 12, 30),
+        items: [
+          {'name': 'Poulet Boucané', 'quantity': 1, 'price': 25.00, 'vatRate': 2.1},
+        ],
+      );
+
+      final restoSummary = TaxDeclarationHelper.buildRestaurantTaxSummary(
+        restaurantId: 'r_1',
+        restaurantName: 'Chez Paul',
+        orders: [order],
+      );
+      final restoCsv = TaxDeclarationHelper.generateRestaurantTaxSummaryCsv(
+        summary: restoSummary,
+        periodLabel: 'Novembre 2026',
+        territory: TaxTerritory.dromMartiniqueGuadeloupeReunion,
+        regime: RestaurantTaxRegime.reelAssujettiTva,
+      );
+      expect(restoCsv.startsWith('\uFEFF'), isTrue);
+      expect(restoCsv, contains('24,49;0,51;25,00'));
+      expect(restoCsv, contains(';19,50;'));
+
+      final platformSummary = TaxDeclarationHelper.buildPlatformTaxSummary(orders: [order]);
+      final platformCsv = TaxDeclarationHelper.generatePlatformTaxSummaryCsv(
+        summary: platformSummary,
+        periodLabel: 'Novembre 2026',
+        territory: TaxTerritory.dromMartiniqueGuadeloupeReunion,
+        deliveryTaxMode: PlatformDeliveryTaxMode.mandatePassThrough,
+      );
+      expect(platformCsv.startsWith('\uFEFF'), isTrue);
+      expect(platformCsv, contains('TOTAL CA OPENFOOD À DÉCLARER (CA3);8,5 %;6,22;0,53;6,75'));
+    });
+  });
 }
