@@ -153,6 +153,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       String? clientSecret;
       String? paymentIntentId;
       String? restaurantStripeAccountId;
+      double? serverRestaurantAmount;
+      double? serverPlatformShareAmount;
+      String? serverFeeShareMode;
+
+      void captureServerSplit(Map<dynamic, dynamic> payload) {
+        restaurantStripeAccountId = payload['restaurantStripeAccountId'] as String?;
+        final rCents = (payload['restaurantAmountCents'] as num?)?.toInt();
+        final pCents = (payload['platformShareCents'] as num?)?.toInt();
+        if (rCents != null) {
+          serverRestaurantAmount = rCents / 100.0;
+        }
+        if (pCents != null) {
+          serverPlatformShareAmount = pCents / 100.0;
+        }
+        serverFeeShareMode = payload['feeShareMode']?.toString();
+      }
 
       try {
         final response = await http.post(
@@ -174,7 +190,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (data['success'] == true) {
             clientSecret = data['clientSecret'];
             paymentIntentId = data['paymentIntentId'];
-            restaurantStripeAccountId = data['restaurantStripeAccountId'] as String?;
+            captureServerSplit(data);
           } else {
             throw Exception(data['error'] ?? "Erreur lors de la création du paiement.");
           }
@@ -198,7 +214,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (intentData != null && intentData['clientSecret'] != null) {
             clientSecret = intentData['clientSecret'];
             paymentIntentId = intentData['paymentIntentId'];
-            restaurantStripeAccountId = intentData['restaurantStripeAccountId'] as String?;
+            if (intentData is Map) {
+              captureServerSplit(intentData);
+            }
           } else {
             throw apiError;
           }
@@ -227,6 +245,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           cart,
           paymentIntentId,
           restaurantStripeAccountId: restaurantStripeAccountId,
+          restaurantAmount: serverRestaurantAmount,
+          platformShareAmount: serverPlatformShareAmount,
+          feeShareMode: serverFeeShareMode,
         );
       }
     } catch (e) {
@@ -244,6 +265,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     CartProvider cart,
     String? paymentIntentId, {
     String? restaurantStripeAccountId,
+    double? restaurantAmount,
+    double? platformShareAmount,
+    String? feeShareMode,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final loc = Provider.of<LocationProvider>(context, listen: false);
@@ -258,6 +282,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       promoCodeId: cart.activePromotion?.id,
       discountAmount: cart.calculateDiscount(),
       restaurantStripeAccountId: restaurantStripeAccountId,
+      restaurantAmount: restaurantAmount,
+      platformShareAmount: platformShareAmount,
+      feeShareMode: feeShareMode,
     );
     
     cart.clearCart();

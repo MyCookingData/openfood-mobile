@@ -427,4 +427,150 @@ void main() {
       expect(summaries.first.stripeAccountId, 'acct_1DriverXYZ');
     });
   });
+
+  group('RestaurantFeeShareHelper & Rules Tests', () {
+    test('default food_only + platform Stripe fee keeps delivery & service fees', () {
+      const rule = RestaurantFeeShareRule();
+      final res = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 29.75,
+        foodAmount: 25.00,
+        deliveryFee: 3.50,
+        rule: rule,
+      );
+      expect(res.estimatedStripeFee, 0.70);
+      expect(res.restaurantStripeFee, 0.0);
+      expect(res.commissionAmount, 0.0);
+      expect(res.restaurantTransferAmount, 25.00);
+      expect(res.platformShareAmount, 4.75);
+    });
+
+    test('commission mode deducts percentage + fixed commission accurately', () {
+      const rule = RestaurantFeeShareRule(
+        feeShareMode: FeeShareModes.commission,
+        platformCommissionPercent: 10.0,
+        platformCommissionFixed: 0.50,
+      );
+      final res = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 29.75,
+        foodAmount: 25.00,
+        deliveryFee: 3.50,
+        rule: rule,
+      );
+      expect(res.commissionAmount, 3.00);
+      expect(res.restaurantTransferAmount, 22.00);
+      expect(res.platformShareAmount, 7.75);
+    });
+
+    test('stripeFeeMode split_50 and restaurant deduct expected Stripe shares', () {
+      const split50Rule = RestaurantFeeShareRule(stripeFeeMode: StripeFeeModes.split50);
+      final split50Res = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 29.75,
+        foodAmount: 25.00,
+        deliveryFee: 3.50,
+        rule: split50Rule,
+      );
+      expect(split50Res.restaurantStripeFee, 0.35);
+      expect(split50Res.restaurantTransferAmount, 24.65);
+      expect(split50Res.platformShareAmount, 5.10);
+
+      const restoRule = RestaurantFeeShareRule(stripeFeeMode: StripeFeeModes.restaurant);
+      final restoRes = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 29.75,
+        foodAmount: 25.00,
+        deliveryFee: 3.50,
+        rule: restoRule,
+      );
+      expect(restoRes.restaurantStripeFee, 0.70);
+      expect(restoRes.restaurantTransferAmount, 24.30);
+      expect(restoRes.platformShareAmount, 5.45);
+    });
+
+    test('restaurantReceivesDeliveryFee adds delivery fee to restaurant transfer', () {
+      const rule = RestaurantFeeShareRule(restaurantReceivesDeliveryFee: true);
+      final res = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 29.75,
+        foodAmount: 25.00,
+        deliveryFee: 3.50,
+        rule: rule,
+      );
+      expect(res.restaurantTransferAmount, 28.50);
+      expect(res.platformShareAmount, 1.25);
+    });
+
+    test('full_total mode transfers 100% minus optional Stripe fee share', () {
+      const fullPlatform = RestaurantFeeShareRule(feeShareMode: FeeShareModes.fullTotal);
+      final r1 = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 29.75,
+        foodAmount: 25.00,
+        deliveryFee: 3.50,
+        rule: fullPlatform,
+      );
+      expect(r1.restaurantTransferAmount, 29.75);
+      expect(r1.platformShareAmount, 0.00);
+
+      const fullRestoStripe = RestaurantFeeShareRule(
+        feeShareMode: FeeShareModes.fullTotal,
+        stripeFeeMode: StripeFeeModes.restaurant,
+      );
+      final r2 = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 29.75,
+        foodAmount: 25.00,
+        deliveryFee: 3.50,
+        rule: fullRestoStripe,
+      );
+      expect(r2.restaurantTransferAmount, 29.05);
+      expect(r2.platformShareAmount, 0.70);
+    });
+
+    test('extreme commission clamps restaurant share cleanly to zero', () {
+      const rule = RestaurantFeeShareRule(
+        feeShareMode: FeeShareModes.commission,
+        platformCommissionPercent: 100.0,
+        platformCommissionFixed: 15.0,
+        stripeFeeMode: StripeFeeModes.restaurant,
+      );
+      final res = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 29.75,
+        foodAmount: 25.00,
+        deliveryFee: 3.50,
+        rule: rule,
+      );
+      expect(res.restaurantTransferAmount, 0.0);
+      expect(res.platformShareAmount, 29.75);
+    });
+
+    test('RestaurantModel round-trips all 5 fee-sharing fields and falls back on invalid data', () {
+      final resto = RestaurantModel.fromJson({
+        'id': 'r_1',
+        'name': 'Ti Case',
+        'imageUrl': '',
+        'feeShareMode': 'commission',
+        'platformCommissionPercent': 12.5,
+        'platformCommissionFixed': 1.25,
+        'stripeFeeMode': 'split_50',
+        'restaurantReceivesDeliveryFee': true,
+      });
+      final json = resto.toJson();
+      expect(json['feeShareMode'], FeeShareModes.commission);
+      expect(json['platformCommissionPercent'], 12.5);
+      expect(json['platformCommissionFixed'], 1.25);
+      expect(json['stripeFeeMode'], StripeFeeModes.split50);
+      expect(json['restaurantReceivesDeliveryFee'], isTrue);
+
+      final invalid = RestaurantModel.fromJson({
+        'id': 'r_2',
+        'name': 'Legacy',
+        'imageUrl': '',
+        'feeShareMode': 'unknown_mode',
+        'platformCommissionPercent': 150,
+        'platformCommissionFixed': -10,
+        'stripeFeeMode': 'weird',
+      });
+      expect(invalid.feeShareMode, FeeShareModes.foodOnly);
+      expect(invalid.platformCommissionPercent, 100.0);
+      expect(invalid.platformCommissionFixed, 0.0);
+      expect(invalid.stripeFeeMode, StripeFeeModes.platform);
+      expect(invalid.restaurantReceivesDeliveryFee, isFalse);
+    });
+  });
 }
