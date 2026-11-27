@@ -365,5 +365,66 @@ void main() {
       expect(ordersCsv.startsWith('\uFEFF'), isTrue);
       expect(ordersCsv, contains('27/11/2026;14:30;#ORDER123;Paul;"Le ""Grill""; Créole";25,00;5,00;À payer;'));
     });
+
+    test('Stripe Connect models and validation helpers', () {
+      expect(DriverPayoutHelper.isValidStripeAccountId('acct_1N2abcXYZ'), isTrue);
+      expect(DriverPayoutHelper.isValidStripeAccountId('  acct_1Q90ab  '), isTrue);
+      expect(DriverPayoutHelper.isValidStripeAccountId(''), isFalse);
+      expect(DriverPayoutHelper.isValidStripeAccountId(null), isFalse);
+      expect(DriverPayoutHelper.isValidStripeAccountId('cus_123456'), isFalse);
+      expect(DriverPayoutHelper.isValidStripeAccountId('acct_'), isFalse);
+      expect(DriverPayoutHelper.isValidStripeAccountId('acct_123 456'), isFalse);
+
+      final user = UserModel.fromJson({
+        'id': 'u_drv_1',
+        'email': 'driver@openfood.fr',
+        'name': 'Alex',
+        'role': 'livreur',
+        'stripeAccountId': 'acct_1DriverXYZ',
+        'createdAt': '2026-11-27T12:00:00.000Z',
+      });
+      expect(user.stripeAccountId, 'acct_1DriverXYZ');
+      expect(user.toJson()['stripeAccountId'], 'acct_1DriverXYZ');
+
+      final order = OrderModel(
+        id: 'ord_stripe_1',
+        userId: 'u_cust_1',
+        restaurantId: 'r_1',
+        restaurantName: 'Chez Léo',
+        status: 3,
+        totalAmount: 29.0,
+        items: const [],
+        createdAt: DateTime(2026, 11, 27, 12, 0),
+        deliveredAt: DateTime(2026, 11, 27, 12, 30),
+        driverId: 'u_drv_1',
+        subtotalAmount: 25.0,
+        deliveryFee: 2.75,
+        managementFee: 1.25,
+        smallOrderFee: 0.0,
+        restaurantAmount: 25.0,
+        restaurantStripeAccountId: 'acct_1RestoABC',
+        driverStripeTransferId: 'tr_123456',
+      );
+      final mapped = order.toMap();
+      expect(mapped['subtotalAmount'], 25.0);
+      expect(mapped['deliveryFee'], 2.75);
+      expect(mapped['managementFee'], 1.25);
+      expect(mapped['smallOrderFee'], 0.0);
+      expect(mapped['restaurantAmount'], 25.0);
+      expect(mapped['restaurantStripeAccountId'], 'acct_1RestoABC');
+      expect(mapped['driverStripeTransferId'], 'tr_123456');
+
+      final summaries = DriverPayoutHelper.buildDriverSummaries(
+        [order],
+        driverProfiles: {
+          'u_drv_1': {
+            'name': 'Alex',
+            'stripeAccountId': 'acct_1DriverXYZ',
+          },
+        },
+      );
+      expect(summaries.length, 1);
+      expect(summaries.first.stripeAccountId, 'acct_1DriverXYZ');
+    });
   });
 }

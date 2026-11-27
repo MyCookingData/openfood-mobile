@@ -142,12 +142,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
       // -----------------------------------------------------------
 
-      // Appel API Backend OpenFood Stripe (mode Empreinte)
+      // Appel API Backend OpenFood Stripe (mode Empreinte + routage Stripe Connect restaurant)
       final restaurantIdRaw = cart.items.values.first.restaurantId;
       final user = AuthService().currentUser;
+      final double discountAmount = cart.calculateDiscount();
+      final double rawRestaurantAmount = double.parse((cart.subtotalAmount - discountAmount).toStringAsFixed(2));
+      final double restaurantAmount = rawRestaurantAmount.clamp(0.0, cart.totalFinal).toDouble();
+      final double effectiveDeliveryFee = cart.deliveryFee > 0 ? cart.deliveryFee : 0.0;
 
       String? clientSecret;
       String? paymentIntentId;
+      String? restaurantStripeAccountId;
 
       try {
         final response = await http.post(
@@ -156,6 +161,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           body: jsonEncode({
             'restaurantId': restaurantIdRaw,
             'amount': cart.totalFinal,
+            'restaurantAmount': restaurantAmount,
+            'deliveryFee': effectiveDeliveryFee,
+            'managementFee': cart.managementFee,
+            'smallOrderFee': cart.smallOrderFee,
             'userId': user?.uid ?? 'anonymous',
           }),
         );
@@ -165,6 +174,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (data['success'] == true) {
             clientSecret = data['clientSecret'];
             paymentIntentId = data['paymentIntentId'];
+            restaurantStripeAccountId = data['restaurantStripeAccountId'] as String?;
           } else {
             throw Exception(data['error'] ?? "Erreur lors de la création du paiement.");
           }
@@ -179,11 +189,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           final result = await callable.call({
             'restaurantId': restaurantIdRaw,
             'amount': cart.totalFinal,
+            'restaurantAmount': restaurantAmount,
+            'deliveryFee': effectiveDeliveryFee,
+            'managementFee': cart.managementFee,
+            'smallOrderFee': cart.smallOrderFee,
           });
           final intentData = result.data;
           if (intentData != null && intentData['clientSecret'] != null) {
             clientSecret = intentData['clientSecret'];
             paymentIntentId = intentData['paymentIntentId'];
+            restaurantStripeAccountId = intentData['restaurantStripeAccountId'] as String?;
           } else {
             throw apiError;
           }
@@ -208,7 +223,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       if (success) {
         if (!mounted) return;
-        await _finalizeOrder(cart, paymentIntentId);
+        await _finalizeOrder(
+          cart,
+          paymentIntentId,
+          restaurantStripeAccountId: restaurantStripeAccountId,
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -221,7 +240,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  Future<void> _finalizeOrder(CartProvider cart, String? paymentIntentId) async {
+  Future<void> _finalizeOrder(
+    CartProvider cart,
+    String? paymentIntentId, {
+    String? restaurantStripeAccountId,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final loc = Provider.of<LocationProvider>(context, listen: false);
 
@@ -234,6 +257,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       stripePaymentIntentId: paymentIntentId,
       promoCodeId: cart.activePromotion?.id,
       discountAmount: cart.calculateDiscount(),
+      restaurantStripeAccountId: restaurantStripeAccountId,
     );
     
     cart.clearCart();
