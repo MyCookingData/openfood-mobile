@@ -5,8 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/theme.dart';
 
 class AppVersionService {
-  static const String currentVersion = "1.0.0";
-  static const int currentBuildNumber = 1;
+  static const String currentVersion = "1.0.3";
+  static const int currentBuildNumber = 23;
 
   /// Vérifie si une mise à jour obligatoire est requise et affiche le dialogue bloquant si nécessaire
   static Future<void> checkVersion(BuildContext context) async {
@@ -18,7 +18,7 @@ class AppVersionService {
         await FirebaseFirestore.instance.collection('settings').doc('app_config').set({
           'min_required_version': '1.0.0',
           'min_required_build': 1,
-          'latest_version': '1.0.0',
+          'latest_version': '1.0.3',
           'force_update_enabled': false,
           'update_title': 'Mise à jour requise',
           'update_message': 'Une nouvelle version d\'OpenFood est disponible. Veuillez mettre à jour votre application pour continuer à commander en toute sécurité.',
