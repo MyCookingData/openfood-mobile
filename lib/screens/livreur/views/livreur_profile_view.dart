@@ -7,53 +7,6 @@ import '../../auth/login_screen.dart';
 class LivreurProfileView extends StatelessWidget {
   const LivreurProfileView({super.key});
 
-  void _showRatingInfo(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppTheme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.star, color: AppTheme.gold, size: 32),
-                SizedBox(width: 12),
-                Text("Votre Note Globale", style: TextStyle(color: AppTheme.cream, fontSize: 20, fontWeight: FontWeight.bold)),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              "Cette note est une moyenne calculée automatiquement sur vos 100 dernières livraisons.\n\n"
-              "Elle prend en compte :\n"
-              "• La rapidité de livraison par rapport au temps estimé\n"
-              "• L'évaluation laissée par les clients\n"
-              "• Le soin apporté aux commandes\n\n"
-              "Maintenez une note supérieure à 4.5 pour accéder aux courses prioritaires !",
-              style: TextStyle(color: AppTheme.muted, fontSize: 15, height: 1.5),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.greenXl,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Compris", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _editVehicle(BuildContext context, String currentVehicle) {
     showModalBottomSheet(
       context: context,
@@ -139,7 +92,6 @@ class LivreurProfileView extends StatelessWidget {
         final userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
         final displayName = userData['name'] ?? user.displayName ?? "Livreur";
         final vehicleType = userData['vehicleType'] ?? "Scooter";
-        final rating = userData['rating'] ?? 4.9;
 
         return Scaffold(
           backgroundColor: AppTheme.bg,
@@ -210,61 +162,32 @@ class LivreurProfileView extends StatelessWidget {
                 
                 const SizedBox(height: 32),
                 
-                // Indicateurs (Note / Véhicule)
+                // Indicateur Véhicule
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => _showRatingInfo(context),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(color: AppTheme.surface3, borderRadius: BorderRadius.circular(16)),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.star, color: AppTheme.gold, size: 28),
-                                    const SizedBox(width: 8),
-                                    Text(rating.toStringAsFixed(1), style: const TextStyle(color: AppTheme.cream, fontSize: 24, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text("Note Globale", style: TextStyle(color: AppTheme.cream.withValues(alpha: 0.6), fontSize: 12)),
-                              ],
-                            ),
+                  child: GestureDetector(
+                    onTap: () => _editVehicle(context, vehicleType),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: AppTheme.surface3, borderRadius: BorderRadius.circular(16)),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.two_wheeler, color: Color(0xFF0EA5E9), size: 28),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(vehicleType, style: const TextStyle(color: AppTheme.cream, fontSize: 16, fontWeight: FontWeight.bold)),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.keyboard_arrow_down, color: AppTheme.muted, size: 16),
+                            ],
                           ),
-                        ),
+                          const SizedBox(height: 4),
+                          Text("Véhicule", style: TextStyle(color: AppTheme.cream.withValues(alpha: 0.6), fontSize: 12)),
+                        ],
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => _editVehicle(context, vehicleType),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(color: AppTheme.surface3, borderRadius: BorderRadius.circular(16)),
-                            child: Column(
-                              children: [
-                                const Icon(Icons.two_wheeler, color: Color(0xFF0EA5E9), size: 28),
-                                const SizedBox(height: 8),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(vehicleType, style: const TextStyle(color: AppTheme.cream, fontSize: 16, fontWeight: FontWeight.bold)),
-                                    const SizedBox(width: 4),
-                                    const Icon(Icons.keyboard_arrow_down, color: AppTheme.muted, size: 16),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text("Véhicule", style: TextStyle(color: AppTheme.cream.withValues(alpha: 0.6), fontSize: 12)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
 
