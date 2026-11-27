@@ -232,4 +232,138 @@ void main() {
       expect(withoutOrder.toJson()['categoryOrder'], isEmpty);
     });
   });
+
+  group('DriverPayoutHelper & OrderModel Payout Tests', () {
+    OrderModel makeOrder({
+      required String id,
+      String? driverId = 'drv_1',
+      String? driverName = 'Jean Livreur',
+      int status = 3,
+      double totalAmount = 25.0,
+      double? driverPayout,
+      bool driverPaid = false,
+      DateTime? createdAt,
+      DateTime? deliveredAt,
+      DateTime? driverPaidAt,
+    }) {
+      return OrderModel(
+        id: id,
+        userId: 'cust_1',
+        restaurantId: 'resto_1',
+        restaurantName: 'Le Grill',
+        status: status,
+        totalAmount: totalAmount,
+        items: const [],
+        createdAt: createdAt ?? DateTime(2026, 11, 20, 12, 0),
+        deliveredAt: deliveredAt,
+        driverId: driverId,
+        driverName: driverName,
+        driverPayout: driverPayout,
+        driverPaid: driverPaid,
+        driverPaidAt: driverPaidAt,
+      );
+    }
+
+    test('calculatePayout uses 2.50 + 10% with 2-decimal rounding', () {
+      expect(DriverPayoutHelper.calculatePayout(0.0), 2.50);
+      expect(DriverPayoutHelper.calculatePayout(25.0), 5.00);
+      expect(DriverPayoutHelper.calculatePayout(19.95), 4.50);
+    });
+
+    test('resolveOrderPayout respects driverPayout override and falls back to formula', () {
+      final standard = makeOrder(id: 'o1', totalAmount: 30.0);
+      final overridden = makeOrder(id: 'o2', totalAmount: 30.0, driverPayout: 8.75);
+      expect(DriverPayoutHelper.resolveOrderPayout(standard), 5.50);
+      expect(DriverPayoutHelper.resolveOrderPayout(overridden), 8.75);
+    });
+
+    test('buildDriverSummaries aggregates delivered, in-progress, paid/unpaid and excludes cancelled/unassigned', () {
+      final orders = [
+        makeOrder(id: 'o1', driverId: 'd1', totalAmount: 20.0, driverPaid: true), // 4.50 paid
+        makeOrder(id: 'o2', driverId: 'd1', totalAmount: 30.0, driverPaid: false), // 5.50 unpaid
+        makeOrder(id: 'o3', driverId: 'd1', status: 2, totalAmount: 40.0), // in progress
+        makeOrder(id: 'o4', driverId: 'd1', status: 4, totalAmount: 50.0), // cancelled
+        makeOrder(id: 'o5', driverId: null, status: 3, totalAmount: 15.0), // unassigned
+        makeOrder(id: 'o6', driverId: 'd2', driverName: null, totalAmount: 10.0, driverPayout: 6.00), // 6.00 unpaid
+      ];
+
+      final summaries = DriverPayoutHelper.buildDriverSummaries(
+        orders,
+        driverProfiles: {
+          'd2': {'name': 'Marc Vélo', 'phone': '0696112233', 'vehicleType': 'Vélo'},
+        },
+      );
+
+      expect(summaries.length, 2);
+      // Sorted by unpaidAmount desc: d2 has 6.00 unpaid, d1 has 5.50 unpaid
+      expect(summaries[0].driverId, 'd2');
+      expect(summaries[0].driverName, 'Marc Vélo');
+      expect(summaries[0].vehicleType, 'Vélo');
+      expect(summaries[0].unpaidAmount, 6.00);
+      expect(summaries[0].deliveredOrdersCount, 1);
+
+      expect(summaries[1].driverId, 'd1');
+      expect(summaries[1].deliveredOrdersCount, 2);
+      expect(summaries[1].inProgressOrdersCount, 1);
+      expect(summaries[1].totalOrderVolume, 50.0);
+      expect(summaries[1].totalAmountDue, 10.0);
+      expect(summaries[1].paidAmount, 4.50);
+      expect(summaries[1].unpaidAmount, 5.50);
+      expect(summaries[1].unpaidOrdersCount, 1);
+    });
+
+    test('buildPeriodSummaries groups properly by day, week (ISO Mon-Sun), and month', () {
+      final orders = [
+        makeOrder(id: 'o1', driverId: 'd1', totalAmount: 20.0, deliveredAt: DateTime(2026, 11, 23, 12, 0), driverPaid: true), // Mon W48, 4.50 paid
+        makeOrder(id: 'o2', driverId: 'd2', totalAmount: 30.0, deliveredAt: DateTime(2026, 11, 25, 19, 0)), // Wed W48, 5.50 unpaid
+        makeOrder(id: 'o3', driverId: 'd1', totalAmount: 10.0, deliveredAt: DateTime(2026, 10, 15, 13, 0)), // Oct W42, 3.50 unpaid
+      ];
+
+      final days = DriverPayoutHelper.buildPeriodSummaries(orders, granularity: PayoutPeriodGranularity.day);
+      expect(days.length, 3);
+      expect(days.first.periodLabel, '25/11/2026');
+      expect(days.first.totalAmountDue, 5.50);
+
+      final weeks = DriverPayoutHelper.buildPeriodSummaries(orders, granularity: PayoutPeriodGranularity.week);
+      expect(weeks.length, 2);
+      expect(weeks[0].deliveredOrdersCount, 2);
+      expect(weeks[0].activeDriversCount, 2);
+      expect(weeks[0].totalAmountDue, 10.00);
+      expect(weeks[0].paidAmount, 4.50);
+      expect(weeks[0].unpaidAmount, 5.50);
+
+      final months = DriverPayoutHelper.buildPeriodSummaries(orders, granularity: PayoutPeriodGranularity.month);
+      expect(months.length, 2);
+      expect(months[0].periodLabel, 'Novembre 2026');
+      expect(months[0].totalAmountDue, 10.00);
+      expect(months[1].periodLabel, 'Octobre 2026');
+      expect(months[1].totalAmountDue, 3.50);
+    });
+
+    test('CSV exports include UTF-8 BOM, semicolon separator, decimal comma, and quoting', () {
+      final order = OrderModel(
+        id: 'order123456',
+        userId: 'u1',
+        restaurantId: 'r1',
+        restaurantName: 'Le "Grill"; Créole',
+        status: 3,
+        totalAmount: 25.0,
+        items: const [],
+        createdAt: DateTime(2026, 11, 27, 14, 5),
+        deliveredAt: DateTime(2026, 11, 27, 14, 30),
+        driverId: 'd1',
+        driverName: 'Paul',
+        driverPaid: false,
+      );
+
+      final summaries = DriverPayoutHelper.buildDriverSummaries([order]);
+      final summaryCsv = DriverPayoutHelper.generateDriversSummaryCsv(summaries);
+      expect(summaryCsv.startsWith('\uFEFF'), isTrue);
+      expect(summaryCsv, contains('Paul;;;1;0;25,00;5,00;0,00;5,00;5,00'));
+
+      final ordersCsv = DriverPayoutHelper.generateOrdersCsv([order]);
+      expect(ordersCsv.startsWith('\uFEFF'), isTrue);
+      expect(ordersCsv, contains('27/11/2026;14:30;#ORDER123;Paul;"Le ""Grill""; Créole";25,00;5,00;À payer;'));
+    });
+  });
 }

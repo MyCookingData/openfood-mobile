@@ -153,8 +153,8 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
     OrderService.assignDriver(orderId, driverId);
   }
 
-  void _finishOrder(String orderId) {
-    OrderService.updateOrderStatus(orderId, 4); // 4 = Livrée
+  void _finishOrder(OrderModel order) {
+    OrderService.completeDelivery(order.id, order.totalAmount);
   }
 
   Future<void> _navigateToRestaurant(String restaurantName) async {
@@ -235,7 +235,7 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
                   }
 
                   if (activeSnap.hasData) {
-                    final activeOrders = activeSnap.data!.where((o) => o.status == 2 || o.status == 3).toList();
+                    final activeOrders = activeSnap.data!.where((o) => o.status == 2).toList();
                     if (activeOrders.isNotEmpty) {
                       final activeOrder = activeOrders.first;
                       WidgetsBinding.instance.addPostFrameCallback((_) => _checkActiveOrderAlert(activeOrder));
@@ -366,7 +366,7 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
   }
 
   Widget _buildOfferCard(OrderModel order) {
-    double revenLivreur = 2.50 + (order.totalAmount * 0.10); 
+    final double revenLivreur = DriverPayoutHelper.resolveOrderPayout(order);
     double dist = _calculateDistance(order);
     String distStr = dist == double.infinity ? "GPS Requis" : "${dist.toStringAsFixed(1)} km";
 
@@ -466,6 +466,7 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
   }
 
   Widget _buildActiveDeliveryUI(OrderModel order) {
+    final bool isPickedUp = order.pickedUpAt != null;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
@@ -537,25 +538,25 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
              
              GestureDetector(
                 onTap: () {
-                  if (order.status == 2) {
-                    OrderService.updateOrderStatus(order.id, 3);
+                  if (!isPickedUp) {
+                    OrderService.markOrderPickedUp(order.id);
                   } else {
-                    _finishOrder(order.id);
+                    _finishOrder(order);
                   }
                 },
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 24),
                   decoration: BoxDecoration(
-                    gradient: order.status == 2 
+                    gradient: !isPickedUp
                         ? const LinearGradient(colors: [Color(0xFF0EA5E9), Color(0xFF2E8FE8)])
                         : const LinearGradient(colors: [Color(0xFF9333EA), Color(0xFFA855F7)]),
                     borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(26), bottomRight: Radius.circular(26)),
                   ),
                   child: Center(
                     child: Text(
-                      order.status == 2 ? "J'AI RÉCUPÉRÉ LA COMMANDE" : "VALIDER LA LIVRAISON", 
-                      style: const TextStyle(fontFamily: 'Bricolage Grotesque', color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1)
+                      !isPickedUp ? "J'AI RÉCUPÉRÉ LA COMMANDE" : "VALIDER LA LIVRAISON",
+                      style: const TextStyle(fontFamily: 'Bricolage Grotesque', color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1),
                     ),
                   ),
                 ),

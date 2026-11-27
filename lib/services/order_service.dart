@@ -210,20 +210,64 @@ class OrderService {
     });
   }
 
-  /// Le livreur accepte une course (assignation du driverId, statut passe à 3, ajout des infos livreur)
+  /// Le livreur signale qu'il a récupéré la commande au restaurant (`status` reste à 2 = En route)
+  static Future<void> markOrderPickedUp(String orderId) async {
+    try {
+      await _firestore.collection('orders').doc(orderId).update({
+        'pickedUpAt': Timestamp.now(),
+      });
+    } catch (e) {
+      debugPrint("❌ Erreur markOrderPickedUp: $e");
+      throw Exception("Impossible de confirmer la récupération de la commande.");
+    }
+  }
+
+  /// Le livreur valide la livraison (`status = 3 = Livré`, horodatage et montant dû calculé)
+  static Future<void> completeDelivery(String orderId, double orderTotalAmount) async {
+    try {
+      await _firestore.collection('orders').doc(orderId).update({
+        'status': 3,
+        'deliveredAt': Timestamp.now(),
+        'driverPayout': DriverPayoutHelper.calculatePayout(orderTotalAmount),
+      });
+      debugPrint("✅ Livraison validée (status 3) pour commande $orderId");
+    } catch (e) {
+      debugPrint("❌ Erreur completeDelivery: $e");
+      throw Exception("Impossible de valider la livraison.");
+    }
+  }
+
+  /// Le livreur accepte une course (assignation du driverId et ajout des infos livreur)
   static Future<void> assignDriver(String orderId, String driverId) async {
     try {
-      // Récupérer les informations du livreur pour le restaurateur/client
+      // Récupérer les informations du livreur pour le restaurateur/client/admin
       final user = FirebaseAuth.instance.currentUser;
       String? driverPhone = user?.phoneNumber;
       String? driverName = user?.displayName;
-      
-      // Fallback sur les SharedPreferences si FirebaseAuth ne les a pas
+
+      try {
+        final userDoc = await _firestore.collection('users').doc(driverId).get();
+        if (userDoc.exists && userDoc.data() != null) {
+          final userData = userDoc.data()!;
+          final docName = userData['name']?.toString().trim();
+          final docPhone = (userData['phone'] ?? userData['phoneNumber'] ?? userData['email'])?.toString().trim();
+          if (docName != null && docName.isNotEmpty) {
+            driverName = docName;
+          }
+          if (docPhone != null && docPhone.isNotEmpty) {
+            driverPhone = docPhone;
+          }
+        }
+      } catch (e) {
+        debugPrint("Impossible de lire le profil users/$driverId: $e");
+      }
+
+      // Fallback sur les SharedPreferences si FirebaseAuth/Firestore ne les a pas
       if (driverPhone == null || driverPhone.isEmpty) {
         final prefs = await SharedPreferences.getInstance();
         driverPhone = prefs.getString('phoneNumber') ?? '0600000000';
       }
-      if (driverName == null || driverName.isEmpty) {
+      if (driverName == null || driverName.trim().isEmpty) {
         driverName = 'Livreur Partenaire';
       }
 

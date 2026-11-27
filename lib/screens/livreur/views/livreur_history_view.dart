@@ -76,10 +76,11 @@ class _LivreurHistoryViewState extends State<LivreurHistoryView> {
                 final allDocs = snapshot.data!.docs;
                 final docs = allDocs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
-                  if (data['status'] != 4) return false;
-                  final time = data['createdAt'] as Timestamp?;
+                  if (data['status'] != 3) return false;
+                  final time = (data['deliveredAt'] as Timestamp?) ?? (data['createdAt'] as Timestamp?);
                   if (time == null) return false;
-                  return time.toDate().isAfter(startOfDay) && time.toDate().isBefore(endOfDay);
+                  final dt = time.toDate();
+                  return !dt.isBefore(startOfDay) && dt.isBefore(endOfDay);
                 }).toList();
                 
                 if (docs.isEmpty) {
@@ -88,19 +89,20 @@ class _LivreurHistoryViewState extends State<LivreurHistoryView> {
 
                 // Tri local par date décroissante
                 docs.sort((a, b) {
-                  final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
-                  final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+                  final aData = a.data() as Map<String, dynamic>;
+                  final bData = b.data() as Map<String, dynamic>;
+                  final aTime = (aData['deliveredAt'] as Timestamp?) ?? (aData['createdAt'] as Timestamp?);
+                  final bTime = (bData['deliveredAt'] as Timestamp?) ?? (bData['createdAt'] as Timestamp?);
                   if (aTime == null || bTime == null) return 0;
                   return bTime.compareTo(aTime);
                 });
                 
+                final List<OrderModel> dayOrders = docs.map((doc) => OrderModel.fromFirestore(doc)).toList();
                 double totalGains = 0;
-                int totalCourses = docs.length;
+                int totalCourses = dayOrders.length;
                 
-                for (var doc in docs) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final totalAmt = (data['totalAmount'] ?? 0.0) as num;
-                  totalGains += (2.50 + (totalAmt * 0.10));
+                for (var order in dayOrders) {
+                  totalGains += DriverPayoutHelper.resolveOrderPayout(order);
                 }
 
                 return CustomScrollView(
@@ -187,9 +189,9 @@ class _LivreurHistoryViewState extends State<LivreurHistoryView> {
                         : SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
-                                final docSnap = docs[index];
-                                final order = OrderModel.fromFirestore(docSnap);
-                                final gain = 2.50 + (order.totalAmount * 0.10);
+                                final order = dayOrders[index];
+                                final gain = DriverPayoutHelper.resolveOrderPayout(order);
+                                final orderTime = DriverPayoutHelper.effectiveOrderDate(order);
                                 
                                 return Container(
                                   margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -223,7 +225,7 @@ class _LivreurHistoryViewState extends State<LivreurHistoryView> {
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              DateFormat('HH:mm').format(order.createdAt),
+                                              DateFormat('HH:mm').format(orderTime),
                                               style: const TextStyle(color: AppTheme.muted, fontSize: 13),
                                             ),
                                           ],
@@ -237,7 +239,7 @@ class _LivreurHistoryViewState extends State<LivreurHistoryView> {
                                   ),
                                 );
                               },
-                              childCount: docs.length,
+                              childCount: dayOrders.length,
                             ),
                           ),
                           
