@@ -154,7 +154,7 @@ class _LivreurDashboardViewState extends State<LivreurDashboardView> {
   }
 
   void _finishOrder(OrderModel order) {
-    OrderService.completeDelivery(order.id, order.totalAmount);
+    OrderService.completeDelivery(order);
   }
 
   Future<void> _navigateToRestaurant(String restaurantName) async {

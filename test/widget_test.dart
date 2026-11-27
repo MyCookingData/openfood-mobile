@@ -240,6 +240,7 @@ void main() {
       String? driverName = 'Jean Livreur',
       int status = 3,
       double totalAmount = 25.0,
+      double? deliveryFee,
       double? driverPayout,
       bool driverPaid = false,
       DateTime? createdAt,
@@ -253,6 +254,7 @@ void main() {
         restaurantName: 'Le Grill',
         status: status,
         totalAmount: totalAmount,
+        deliveryFee: deliveryFee,
         items: const [],
         createdAt: createdAt ?? DateTime(2026, 11, 20, 12, 0),
         deliveredAt: deliveredAt,
@@ -264,27 +266,30 @@ void main() {
       );
     }
 
-    test('calculatePayout uses 2.50 + 10% with 2-decimal rounding', () {
-      expect(DriverPayoutHelper.calculatePayout(0.0), 2.50);
-      expect(DriverPayoutHelper.calculatePayout(25.0), 5.00);
-      expect(DriverPayoutHelper.calculatePayout(19.95), 4.50);
+    test('calculatePayout returns 100% of deliveryFee or 2.50 fallback for legacy null orders', () {
+      expect(DriverPayoutHelper.calculatePayout(3.50), 3.50);
+      expect(DriverPayoutHelper.calculatePayout(4.246), 4.25);
+      expect(DriverPayoutHelper.calculatePayout(0.0), 0.00);
+      expect(DriverPayoutHelper.calculatePayout(null), 2.50);
     });
 
-    test('resolveOrderPayout respects driverPayout override and falls back to formula', () {
-      final standard = makeOrder(id: 'o1', totalAmount: 30.0);
-      final overridden = makeOrder(id: 'o2', totalAmount: 30.0, driverPayout: 8.75);
-      expect(DriverPayoutHelper.resolveOrderPayout(standard), 5.50);
+    test('resolveOrderPayout respects driverPayout override, else 100% deliveryFee, else 2.50 legacy fallback', () {
+      final withFee = makeOrder(id: 'o1', totalAmount: 30.0, deliveryFee: 4.10);
+      final overridden = makeOrder(id: 'o2', totalAmount: 30.0, deliveryFee: 4.10, driverPayout: 8.75);
+      final legacy = makeOrder(id: 'o3', totalAmount: 30.0, deliveryFee: null);
+      expect(DriverPayoutHelper.resolveOrderPayout(withFee), 4.10);
       expect(DriverPayoutHelper.resolveOrderPayout(overridden), 8.75);
+      expect(DriverPayoutHelper.resolveOrderPayout(legacy), 2.50);
     });
 
     test('buildDriverSummaries aggregates delivered, in-progress, paid/unpaid and excludes cancelled/unassigned', () {
       final orders = [
-        makeOrder(id: 'o1', driverId: 'd1', totalAmount: 20.0, driverPaid: true), // 4.50 paid
-        makeOrder(id: 'o2', driverId: 'd1', totalAmount: 30.0, driverPaid: false), // 5.50 unpaid
-        makeOrder(id: 'o3', driverId: 'd1', status: 2, totalAmount: 40.0), // in progress
-        makeOrder(id: 'o4', driverId: 'd1', status: 4, totalAmount: 50.0), // cancelled
-        makeOrder(id: 'o5', driverId: null, status: 3, totalAmount: 15.0), // unassigned
-        makeOrder(id: 'o6', driverId: 'd2', driverName: null, totalAmount: 10.0, driverPayout: 6.00), // 6.00 unpaid
+        makeOrder(id: 'o1', driverId: 'd1', totalAmount: 20.0, deliveryFee: 3.50, driverPaid: true), // 3.50 paid
+        makeOrder(id: 'o2', driverId: 'd1', totalAmount: 30.0, deliveryFee: 4.20, driverPaid: false), // 4.20 unpaid
+        makeOrder(id: 'o3', driverId: 'd1', status: 2, totalAmount: 40.0, deliveryFee: 5.00), // in progress
+        makeOrder(id: 'o4', driverId: 'd1', status: 4, totalAmount: 50.0, deliveryFee: 5.00), // cancelled
+        makeOrder(id: 'o5', driverId: null, status: 3, totalAmount: 15.0, deliveryFee: 2.50), // unassigned
+        makeOrder(id: 'o6', driverId: 'd2', driverName: null, totalAmount: 10.0, deliveryFee: 2.50, driverPayout: 6.00), // 6.00 unpaid
       ];
 
       final summaries = DriverPayoutHelper.buildDriverSummaries(
@@ -295,7 +300,7 @@ void main() {
       );
 
       expect(summaries.length, 2);
-      // Sorted by unpaidAmount desc: d2 has 6.00 unpaid, d1 has 5.50 unpaid
+      // Sorted by unpaidAmount desc: d2 has 6.00 unpaid, d1 has 4.20 unpaid
       expect(summaries[0].driverId, 'd2');
       expect(summaries[0].driverName, 'Marc Vélo');
       expect(summaries[0].vehicleType, 'Vélo');
@@ -306,38 +311,38 @@ void main() {
       expect(summaries[1].deliveredOrdersCount, 2);
       expect(summaries[1].inProgressOrdersCount, 1);
       expect(summaries[1].totalOrderVolume, 50.0);
-      expect(summaries[1].totalAmountDue, 10.0);
-      expect(summaries[1].paidAmount, 4.50);
-      expect(summaries[1].unpaidAmount, 5.50);
+      expect(summaries[1].totalAmountDue, 7.70);
+      expect(summaries[1].paidAmount, 3.50);
+      expect(summaries[1].unpaidAmount, 4.20);
       expect(summaries[1].unpaidOrdersCount, 1);
     });
 
     test('buildPeriodSummaries groups properly by day, week (ISO Mon-Sun), and month', () {
       final orders = [
-        makeOrder(id: 'o1', driverId: 'd1', totalAmount: 20.0, deliveredAt: DateTime(2026, 11, 23, 12, 0), driverPaid: true), // Mon W48, 4.50 paid
-        makeOrder(id: 'o2', driverId: 'd2', totalAmount: 30.0, deliveredAt: DateTime(2026, 11, 25, 19, 0)), // Wed W48, 5.50 unpaid
-        makeOrder(id: 'o3', driverId: 'd1', totalAmount: 10.0, deliveredAt: DateTime(2026, 10, 15, 13, 0)), // Oct W42, 3.50 unpaid
+        makeOrder(id: 'o1', driverId: 'd1', totalAmount: 20.0, deliveryFee: 3.50, deliveredAt: DateTime(2026, 11, 23, 12, 0), driverPaid: true), // Mon W48, 3.50 paid
+        makeOrder(id: 'o2', driverId: 'd2', totalAmount: 30.0, deliveryFee: 4.20, deliveredAt: DateTime(2026, 11, 25, 19, 0)), // Wed W48, 4.20 unpaid
+        makeOrder(id: 'o3', driverId: 'd1', totalAmount: 10.0, deliveryFee: 2.50, deliveredAt: DateTime(2026, 10, 15, 13, 0)), // Oct W42, 2.50 unpaid
       ];
 
       final days = DriverPayoutHelper.buildPeriodSummaries(orders, granularity: PayoutPeriodGranularity.day);
       expect(days.length, 3);
       expect(days.first.periodLabel, '25/11/2026');
-      expect(days.first.totalAmountDue, 5.50);
+      expect(days.first.totalAmountDue, 4.20);
 
       final weeks = DriverPayoutHelper.buildPeriodSummaries(orders, granularity: PayoutPeriodGranularity.week);
       expect(weeks.length, 2);
       expect(weeks[0].deliveredOrdersCount, 2);
       expect(weeks[0].activeDriversCount, 2);
-      expect(weeks[0].totalAmountDue, 10.00);
-      expect(weeks[0].paidAmount, 4.50);
-      expect(weeks[0].unpaidAmount, 5.50);
+      expect(weeks[0].totalAmountDue, 7.70);
+      expect(weeks[0].paidAmount, 3.50);
+      expect(weeks[0].unpaidAmount, 4.20);
 
       final months = DriverPayoutHelper.buildPeriodSummaries(orders, granularity: PayoutPeriodGranularity.month);
       expect(months.length, 2);
       expect(months[0].periodLabel, 'Novembre 2026');
-      expect(months[0].totalAmountDue, 10.00);
+      expect(months[0].totalAmountDue, 7.70);
       expect(months[1].periodLabel, 'Octobre 2026');
-      expect(months[1].totalAmountDue, 3.50);
+      expect(months[1].totalAmountDue, 2.50);
     });
 
     test('CSV exports include UTF-8 BOM, semicolon separator, decimal comma, and quoting', () {
@@ -348,6 +353,7 @@ void main() {
         restaurantName: 'Le "Grill"; Créole',
         status: 3,
         totalAmount: 25.0,
+        deliveryFee: 3.50,
         items: const [],
         createdAt: DateTime(2026, 11, 27, 14, 5),
         deliveredAt: DateTime(2026, 11, 27, 14, 30),
@@ -359,11 +365,11 @@ void main() {
       final summaries = DriverPayoutHelper.buildDriverSummaries([order]);
       final summaryCsv = DriverPayoutHelper.generateDriversSummaryCsv(summaries);
       expect(summaryCsv.startsWith('\uFEFF'), isTrue);
-      expect(summaryCsv, contains('Paul;;;1;0;25,00;5,00;0,00;5,00;5,00'));
+      expect(summaryCsv, contains('Paul;;;1;0;25,00;3,50;0,00;3,50;3,50'));
 
       final ordersCsv = DriverPayoutHelper.generateOrdersCsv([order]);
       expect(ordersCsv.startsWith('\uFEFF'), isTrue);
-      expect(ordersCsv, contains('27/11/2026;14:30;#ORDER123;Paul;"Le ""Grill""; Créole";25,00;5,00;À payer;'));
+      expect(ordersCsv, contains('27/11/2026;14:30;#ORDER123;Paul;"Le ""Grill""; Créole";25,00;3,50;À payer;'));
     });
 
     test('Stripe Connect models and validation helpers', () {
@@ -401,7 +407,7 @@ void main() {
         deliveryFee: 2.75,
         managementFee: 1.25,
         smallOrderFee: 0.0,
-        restaurantAmount: 25.0,
+        restaurantAmount: 19.50,
         restaurantStripeAccountId: 'acct_1RestoABC',
         driverStripeTransferId: 'tr_123456',
       );
@@ -410,7 +416,7 @@ void main() {
       expect(mapped['deliveryFee'], 2.75);
       expect(mapped['managementFee'], 1.25);
       expect(mapped['smallOrderFee'], 0.0);
-      expect(mapped['restaurantAmount'], 25.0);
+      expect(mapped['restaurantAmount'], 19.50);
       expect(mapped['restaurantStripeAccountId'], 'acct_1RestoABC');
       expect(mapped['driverStripeTransferId'], 'tr_123456');
 
@@ -429,7 +435,7 @@ void main() {
   });
 
   group('RestaurantFeeShareHelper & Rules Tests', () {
-    test('default food_only + platform Stripe fee keeps delivery & service fees', () {
+    test('default OpenFood rule splits basket 78% restaurant / 22% OpenFood, 100% service to OpenFood, 100% delivery to driver', () {
       const rule = RestaurantFeeShareRule();
       final res = RestaurantFeeShareHelper.calculateBreakdown(
         totalAmount: 29.75,
@@ -439,12 +445,64 @@ void main() {
       );
       expect(res.estimatedStripeFee, 0.70);
       expect(res.restaurantStripeFee, 0.0);
+      expect(res.commissionAmount, 5.50);
+      expect(res.restaurantTransferAmount, 19.50);
+      expect(res.serviceFees, 1.25);
+      expect(res.driverDeliveryShare, 3.50);
+      expect(res.openFoodNetShare, 6.75);
+      expect(res.platformShareAmount, 10.25);
+      expect(res.restaurantTransferAmount + res.driverDeliveryShare + res.openFoodNetShare, 29.75);
+
+      final smallOrder = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 15.00,
+        foodAmount: 10.00,
+        deliveryFee: 2.50,
+        rule: rule,
+      );
+      expect(smallOrder.commissionAmount, 2.20);
+      expect(smallOrder.restaurantTransferAmount, 7.80);
+      expect(smallOrder.serviceFees, 2.50);
+      expect(smallOrder.driverDeliveryShare, 2.50);
+      expect(smallOrder.openFoodNetShare, 4.70);
+      expect(smallOrder.platformShareAmount, 7.20);
+
+      final clickCollect = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 21.00,
+        foodAmount: 20.00,
+        deliveryFee: 0.00,
+        rule: rule,
+      );
+      expect(clickCollect.commissionAmount, 4.40);
+      expect(clickCollect.restaurantTransferAmount, 15.60);
+      expect(clickCollect.serviceFees, 1.00);
+      expect(clickCollect.driverDeliveryShare, 0.00);
+      expect(clickCollect.openFoodNetShare, 5.40);
+      expect(clickCollect.platformShareAmount, 5.40);
+
+      final desc = RestaurantFeeShareHelper.describeRuleFr(rule);
+      expect(desc, contains('78 % Restaurateur'));
+      expect(desc, contains('22 % OpenFood'));
+      expect(desc, contains('Frais de service : 100 % OpenFood'));
+      expect(desc, contains('Livraison : 100 % Livreur'));
+    });
+
+    test('explicit food_only keeps 100% food for restaurant and service/delivery on platform', () {
+      const rule = RestaurantFeeShareRule(feeShareMode: FeeShareModes.foodOnly);
+      final res = RestaurantFeeShareHelper.calculateBreakdown(
+        totalAmount: 29.75,
+        foodAmount: 25.00,
+        deliveryFee: 3.50,
+        rule: rule,
+      );
       expect(res.commissionAmount, 0.0);
       expect(res.restaurantTransferAmount, 25.00);
+      expect(res.serviceFees, 1.25);
+      expect(res.driverDeliveryShare, 3.50);
+      expect(res.openFoodNetShare, 1.25);
       expect(res.platformShareAmount, 4.75);
     });
 
-    test('commission mode deducts percentage + fixed commission accurately', () {
+    test('custom commission mode deducts percentage + fixed commission accurately', () {
       const rule = RestaurantFeeShareRule(
         feeShareMode: FeeShareModes.commission,
         platformCommissionPercent: 10.0,
@@ -458,11 +516,16 @@ void main() {
       );
       expect(res.commissionAmount, 3.00);
       expect(res.restaurantTransferAmount, 22.00);
+      expect(res.driverDeliveryShare, 3.50);
+      expect(res.openFoodNetShare, 4.25);
       expect(res.platformShareAmount, 7.75);
     });
 
     test('stripeFeeMode split_50 and restaurant deduct expected Stripe shares', () {
-      const split50Rule = RestaurantFeeShareRule(stripeFeeMode: StripeFeeModes.split50);
+      const split50Rule = RestaurantFeeShareRule(
+        feeShareMode: FeeShareModes.foodOnly,
+        stripeFeeMode: StripeFeeModes.split50,
+      );
       final split50Res = RestaurantFeeShareHelper.calculateBreakdown(
         totalAmount: 29.75,
         foodAmount: 25.00,
@@ -473,7 +536,10 @@ void main() {
       expect(split50Res.restaurantTransferAmount, 24.65);
       expect(split50Res.platformShareAmount, 5.10);
 
-      const restoRule = RestaurantFeeShareRule(stripeFeeMode: StripeFeeModes.restaurant);
+      const restoRule = RestaurantFeeShareRule(
+        feeShareMode: FeeShareModes.foodOnly,
+        stripeFeeMode: StripeFeeModes.restaurant,
+      );
       final restoRes = RestaurantFeeShareHelper.calculateBreakdown(
         totalAmount: 29.75,
         foodAmount: 25.00,
@@ -485,8 +551,11 @@ void main() {
       expect(restoRes.platformShareAmount, 5.45);
     });
 
-    test('restaurantReceivesDeliveryFee adds delivery fee to restaurant transfer', () {
-      const rule = RestaurantFeeShareRule(restaurantReceivesDeliveryFee: true);
+    test('restaurantReceivesDeliveryFee adds delivery fee to restaurant transfer and zeroes driverDeliveryShare', () {
+      const rule = RestaurantFeeShareRule(
+        feeShareMode: FeeShareModes.foodOnly,
+        restaurantReceivesDeliveryFee: true,
+      );
       final res = RestaurantFeeShareHelper.calculateBreakdown(
         totalAmount: 29.75,
         foodAmount: 25.00,
@@ -494,6 +563,8 @@ void main() {
         rule: rule,
       );
       expect(res.restaurantTransferAmount, 28.50);
+      expect(res.driverDeliveryShare, 0.00);
+      expect(res.openFoodNetShare, 1.25);
       expect(res.platformShareAmount, 1.25);
     });
 
@@ -506,6 +577,8 @@ void main() {
         rule: fullPlatform,
       );
       expect(r1.restaurantTransferAmount, 29.75);
+      expect(r1.driverDeliveryShare, 0.00);
+      expect(r1.openFoodNetShare, 0.00);
       expect(r1.platformShareAmount, 0.00);
 
       const fullRestoStripe = RestaurantFeeShareRule(
@@ -519,6 +592,8 @@ void main() {
         rule: fullRestoStripe,
       );
       expect(r2.restaurantTransferAmount, 29.05);
+      expect(r2.driverDeliveryShare, 0.00);
+      expect(r2.openFoodNetShare, 0.70);
       expect(r2.platformShareAmount, 0.70);
     });
 
@@ -539,7 +614,28 @@ void main() {
       expect(res.platformShareAmount, 29.75);
     });
 
-    test('RestaurantModel round-trips all 5 fee-sharing fields and falls back on invalid data', () {
+    test('RestaurantModel applies 22% commission defaults when missing, preserves explicit 0/food_only, and validates invalid data', () {
+      final defaultResto = RestaurantModel.fromJson({
+        'id': 'r_default',
+        'name': 'Default Resto',
+        'imageUrl': '',
+      });
+      expect(defaultResto.feeShareMode, FeeShareModes.commission);
+      expect(defaultResto.platformCommissionPercent, 22.0);
+      expect(defaultResto.platformCommissionFixed, 0.0);
+      expect(defaultResto.stripeFeeMode, StripeFeeModes.platform);
+      expect(defaultResto.restaurantReceivesDeliveryFee, isFalse);
+
+      final explicitZero = RestaurantModel.fromJson({
+        'id': 'r_zero',
+        'name': 'Zero Commission Resto',
+        'imageUrl': '',
+        'feeShareMode': 'food_only',
+        'platformCommissionPercent': 0,
+      });
+      expect(explicitZero.feeShareMode, FeeShareModes.foodOnly);
+      expect(explicitZero.platformCommissionPercent, 0.0);
+
       final resto = RestaurantModel.fromJson({
         'id': 'r_1',
         'name': 'Ti Case',
@@ -559,14 +655,14 @@ void main() {
 
       final invalid = RestaurantModel.fromJson({
         'id': 'r_2',
-        'name': 'Legacy',
+        'name': 'Invalid Values',
         'imageUrl': '',
         'feeShareMode': 'unknown_mode',
         'platformCommissionPercent': 150,
         'platformCommissionFixed': -10,
         'stripeFeeMode': 'weird',
       });
-      expect(invalid.feeShareMode, FeeShareModes.foodOnly);
+      expect(invalid.feeShareMode, FeeShareModes.commission);
       expect(invalid.platformCommissionPercent, 100.0);
       expect(invalid.platformCommissionFixed, 0.0);
       expect(invalid.stripeFeeMode, StripeFeeModes.platform);
