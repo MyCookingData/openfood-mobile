@@ -34,10 +34,29 @@ class _RestoScreenState extends State<RestoScreen> {
   final List<int> _categoryListIndices = [];
   List<String> _navCategories = [];
   late Future<QuerySnapshot> _restaurantFuture;
+  late final Stream<QuerySnapshot> _categoriesStream;
+  String? _watchedRestaurantId;
+  Stream<DocumentSnapshot>? _restaurantDocStream;
+  Stream<QuerySnapshot>? _productsStream;
+
+  void _ensureRestaurantStreams(String restaurantId) {
+    if (_watchedRestaurantId != restaurantId) {
+      _watchedRestaurantId = restaurantId;
+      _restaurantDocStream = FirebaseFirestore.instance
+          .collection('restaurants')
+          .doc(restaurantId)
+          .snapshots();
+      _productsStream = FirebaseFirestore.instance
+          .collection('products')
+          .where('restaurantId', isEqualTo: restaurantId)
+          .snapshots();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _categoriesStream = FirebaseFirestore.instance.collection('categories').snapshots();
     if (widget.restaurantId != null && widget.restaurantId!.isNotEmpty) {
       _restaurantFuture = FirebaseFirestore.instance
           .collection('restaurants')
@@ -425,83 +444,143 @@ class _RestoScreenState extends State<RestoScreen> {
               }
 
               String restaurantId = widget.restaurantId ?? widget.restaurantName;
-              String actualRestoName = widget.restaurantName;
-              String restoZone = "";
-              String restoImage = "";
-              String restoType = "";
-              double? restoRating;
-              String insta = "";
-              String fb = "";
-              String tiktok = "";
-              Map<String, dynamic>? openingHours;
-              String manualStatus = 'actif';
+              Map<String, dynamic>? initialRd;
               if (restoSnap.hasData && restoSnap.data!.docs.isNotEmpty) {
                 final doc = restoSnap.data!.docs.first;
                 restaurantId = doc.id;
-                final rd = doc.data() as Map<String, dynamic>;
-                if (rd['name'] != null && rd['name'].toString().trim().isNotEmpty && !RestaurantHelper.isRawId(rd['name'].toString())) {
-                  actualRestoName = rd['name'].toString().trim();
-                }
-                restoZone = (rd['zone'] ?? rd['address'] ?? "").toString();
-                restoImage = (rd['imageUrl'] ?? rd['image'] ?? rd['coverImage'] ?? rd['photo'] ?? "").toString();
-                restoType = (rd['type'] ?? "").toString();
-                restoRating = (rd['rating'] as num?)?.toDouble();
-                insta = (rd['instagram'] ?? "").toString();
-                fb = (rd['facebook'] ?? "").toString();
-                tiktok = (rd['tiktok'] ?? "").toString();
-                if (rd['openingHours'] is Map) {
-                  openingHours = Map<String, dynamic>.from(rd['openingHours'] as Map);
-                }
-                manualStatus = (rd['status'] ?? 'actif').toString();
+                initialRd = doc.data() as Map<String, dynamic>;
               }
-              RestaurantHelper.registerRestaurant(restaurantId, actualRestoName);
-              final openStatus = OpeningHoursHelper.getStatus(
-                openingHours,
-                manualStatus: manualStatus,
-              );
+              _ensureRestaurantStreams(restaurantId);
 
-              return StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('products')
-                    .where('restaurantId', isEqualTo: restaurantId)
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator(color: AppTheme.greenXl));
+              return StreamBuilder<DocumentSnapshot>(
+                stream: _restaurantDocStream,
+                builder: (context, liveRestoSnap) {
+                  Map<String, dynamic>? rd = initialRd;
+                  if (liveRestoSnap.hasData &&
+                      liveRestoSnap.data!.exists &&
+                      liveRestoSnap.data!.data() != null) {
+                    rd = liveRestoSnap.data!.data() as Map<String, dynamic>;
                   }
 
-              if (snapshot.hasError) {
-                return Center(child: Text("Erreur : ${snapshot.error}", style: const TextStyle(color: AppTheme.redL)));
-              }
-
-              final docs = snapshot.data?.docs ?? [];
-
-              if (restoImage.isEmpty && docs.isNotEmpty) {
-                for (var d in docs) {
-                  final pData = d.data() as Map<String, dynamic>;
-                  final pImg = (pData['image'] ?? pData['imageUrl'] ?? '').toString();
-                  if (pImg.isNotEmpty) {
-                    restoImage = pImg;
-                    break;
+                  String actualRestoName = widget.restaurantName;
+                  String restoZone = "";
+                  String restoImage = "";
+                  String restoType = "";
+                  double? restoRating;
+                  String insta = "";
+                  String fb = "";
+                  String tiktok = "";
+                  Map<String, dynamic>? openingHours;
+                  String manualStatus = 'actif';
+                  List<String> restaurantCategoryOrder = const [];
+                  if (rd != null) {
+                    if (rd['name'] != null &&
+                        rd['name'].toString().trim().isNotEmpty &&
+                        !RestaurantHelper.isRawId(rd['name'].toString())) {
+                      actualRestoName = rd['name'].toString().trim();
+                    }
+                    restoZone = (rd['zone'] ?? rd['address'] ?? "").toString();
+                    restoImage = (rd['imageUrl'] ?? rd['image'] ?? rd['coverImage'] ?? rd['photo'] ?? "").toString();
+                    restoType = (rd['type'] ?? "").toString();
+                    restoRating = (rd['rating'] as num?)?.toDouble();
+                    insta = (rd['instagram'] ?? "").toString();
+                    fb = (rd['facebook'] ?? "").toString();
+                    tiktok = (rd['tiktok'] ?? "").toString();
+                    if (rd['openingHours'] is Map) {
+                      openingHours = Map<String, dynamic>.from(rd['openingHours'] as Map);
+                    }
+                    manualStatus = (rd['status'] ?? 'actif').toString();
+                    if (rd['categoryOrder'] is List) {
+                      restaurantCategoryOrder = (rd['categoryOrder'] as List)
+                          .map((e) => e?.toString().trim() ?? '')
+                          .where((e) => e.isNotEmpty)
+                          .toList();
+                    }
                   }
-                }
-              }
+                  RestaurantHelper.registerRestaurant(restaurantId, actualRestoName);
+                  final openStatus = OpeningHoursHelper.getStatus(
+                    openingHours,
+                    manualStatus: manualStatus,
+                  );
 
-              Map<String, List<QueryDocumentSnapshot>> byCategory = {};
-              for (var doc in docs) {
-                final data = doc.data() as Map<String, dynamic>;
-                String cat = data['category'] ?? 'Autre';
-                byCategory.putIfAbsent(cat, () => []).add(doc);
-              }
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: _categoriesStream,
+                    builder: (context, catSnap) {
+                      final Map<String, int> globalCategoryOrder = {};
+                      if (catSnap.hasData) {
+                        for (final catDoc in catSnap.data!.docs) {
+                          final cData = catDoc.data() as Map<String, dynamic>;
+                          final cName = (cData['name'] ?? '').toString().trim();
+                          final cOrder = (cData['order'] as num?)?.toInt();
+                          if (cName.isNotEmpty && cOrder != null) {
+                            globalCategoryOrder[cName] = cOrder;
+                          }
+                        }
+                      }
 
-              List<String> rawCategories = byCategory.keys.toList()..sort();
-              List<QueryDocumentSnapshot> bestsellers = docs.take(min(3, docs.length)).toList();
+                      return StreamBuilder<QuerySnapshot>(
+                        stream: _productsStream,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                            return const Center(child: CircularProgressIndicator(color: AppTheme.greenXl));
+                          }
 
-              _navCategories = [];
-              if (bestsellers.isNotEmpty) _navCategories.add("Bestsellers");
-              for (var c in rawCategories) {
-                _navCategories.add(c);
-              }
+                          if (snapshot.hasError) {
+                            return Center(child: Text("Erreur : ${snapshot.error}", style: const TextStyle(color: AppTheme.redL)));
+                          }
+
+                          final docs = snapshot.data?.docs ?? [];
+
+                          if (restoImage.isEmpty && docs.isNotEmpty) {
+                            for (var d in docs) {
+                              final pData = d.data() as Map<String, dynamic>;
+                              final pImg = (pData['image'] ?? pData['imageUrl'] ?? '').toString();
+                              if (pImg.isNotEmpty) {
+                                restoImage = pImg;
+                                break;
+                              }
+                            }
+                          }
+
+                          Map<String, List<QueryDocumentSnapshot>> byCategory = {};
+                          for (var doc in docs) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            String cat = (data['category'] ?? 'Autre').toString();
+                            byCategory.putIfAbsent(cat, () => []).add(doc);
+                          }
+
+                          final List<String> rawCategories = MenuOrderHelper.sortCategories(
+                            byCategory.keys,
+                            restaurantCategoryOrder: restaurantCategoryOrder,
+                            globalCategoryOrder: globalCategoryOrder,
+                          );
+                          for (final cat in rawCategories) {
+                            byCategory[cat] = MenuOrderHelper.sortProducts<QueryDocumentSnapshot>(
+                              byCategory[cat]!,
+                              getSortOrder: (doc) {
+                                final data = doc.data() as Map<String, dynamic>;
+                                return (data['sortOrder'] as num?)?.toInt() ??
+                                    (data['order'] as num?)?.toInt();
+                              },
+                              getName: (doc) {
+                                final data = doc.data() as Map<String, dynamic>;
+                                return (data['name'] ?? '').toString();
+                              },
+                              getId: (doc) => doc.id,
+                            );
+                          }
+
+                          final List<QueryDocumentSnapshot> orderedDocs = [
+                            for (final cat in rawCategories) ...byCategory[cat]!,
+                          ];
+                          final List<QueryDocumentSnapshot> bestsellers =
+                              orderedDocs.take(min(3, orderedDocs.length)).toList();
+
+                          _navCategories = [];
+                          if (bestsellers.isNotEmpty) _navCategories.add("Bestsellers");
+                          for (var c in rawCategories) {
+                            _navCategories.add(c);
+                          }
 
               List<Widget> listItems = [];
               _categoryListIndices.clear();
@@ -539,7 +618,7 @@ class _RestoScreenState extends State<RestoScreen> {
                       scrollDirection: Axis.horizontal,
                       physics: const BouncingScrollPhysics(),
                       children: bestsellers.map((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
+                        final data = Map<String, dynamic>.from(doc.data() as Map);
                         data['id'] = doc.id;
                         data['restaurantId'] = restaurantId;
                         if (data['restaurantName'] == null || data['restaurantName'].toString().trim().isEmpty || RestaurantHelper.isRawId(data['restaurantName'].toString())) {
@@ -604,7 +683,7 @@ class _RestoScreenState extends State<RestoScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
                       children: items.map((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
+                        final data = Map<String, dynamic>.from(doc.data() as Map);
                         data['id'] = doc.id;
                         data['restaurantId'] = restaurantId;
                         if (data['restaurantName'] == null || data['restaurantName'].toString().trim().isEmpty || RestaurantHelper.isRawId(data['restaurantName'].toString())) {
@@ -791,10 +870,14 @@ class _RestoScreenState extends State<RestoScreen> {
                   ),
                 ],
               );
+                        },
+                      );
+                    },
+                  );
+                },
+              );
             },
-          );
-        },
-      ),
+          ),
           
           _buildCartBar(cart),
         ],

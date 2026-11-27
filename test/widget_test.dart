@@ -126,4 +126,110 @@ void main() {
       expect(msg, 'Ce restaurant est actuellement fermé. Impossible de commander pour le moment.');
     });
   });
+
+  group('MenuOrderHelper & Ordering Models Tests', () {
+    test('sortCategories prioritizes restaurant order, then global order, then alphabetical', () {
+      final result = MenuOrderHelper.sortCategories(
+        ['Zebra', 'Burgers & wraps', 'Poulet à partager', 'Soft & boissons', 'Alpha', 'Poulet'],
+        restaurantCategoryOrder: ['Soft & boissons', 'burgers & wraps '],
+        globalCategoryOrder: {'Poulet': 2, 'Poulet à partager': 21},
+      );
+
+      expect(result, [
+        'Soft & boissons',
+        'Burgers & wraps',
+        'Poulet',
+        'Poulet à partager',
+        'Alpha',
+        'Zebra',
+      ]);
+    });
+
+    test('sortProductModels puts ordered items first, then legacy null sortOrder alphabetically by name then id', () {
+      final products = [
+        ProductModel(id: 'p_legacy_b', restaurantId: 'r1', category: 'Burgers', name: 'Burger B', description: '', image: '', priceHT: 10),
+        ProductModel(id: 'p_2', restaurantId: 'r1', category: 'Burgers', name: 'Alpha', description: '', image: '', priceHT: 10, sortOrder: 1),
+        ProductModel(id: 'p_legacy_a2', restaurantId: 'r1', category: 'Burgers', name: 'Burger A', description: '', image: '', priceHT: 10),
+        ProductModel(id: 'p_1', restaurantId: 'r1', category: 'Burgers', name: 'Zeta', description: '', image: '', priceHT: 10, sortOrder: 0),
+        ProductModel(id: 'p_legacy_a1', restaurantId: 'r1', category: 'Burgers', name: 'Burger A', description: '', image: '', priceHT: 10),
+      ];
+
+      final sorted = MenuOrderHelper.sortProductModels(products);
+      expect(sorted.map((p) => p.id).toList(), [
+        'p_1',
+        'p_2',
+        'p_legacy_a1',
+        'p_legacy_a2',
+        'p_legacy_b',
+      ]);
+    });
+
+    test('nextSortOrderForCategory computes 0, max+1, or null for legacy categories', () {
+      expect(MenuOrderHelper.nextSortOrderForCategory(const []), 0);
+
+      final ordered = [
+        ProductModel(id: 'a', restaurantId: 'r1', category: 'C', name: 'A', description: '', image: '', priceHT: 5, sortOrder: 0),
+        ProductModel(id: 'b', restaurantId: 'r1', category: 'C', name: 'B', description: '', image: '', priceHT: 5, sortOrder: 3),
+      ];
+      expect(MenuOrderHelper.nextSortOrderForCategory(ordered), 4);
+
+      final mixedLegacy = [
+        ProductModel(id: 'a', restaurantId: 'r1', category: 'C', name: 'A', description: '', image: '', priceHT: 5, sortOrder: 0),
+        ProductModel(id: 'b', restaurantId: 'r1', category: 'C', name: 'B', description: '', image: '', priceHT: 5),
+      ];
+      expect(MenuOrderHelper.nextSortOrderForCategory(mixedLegacy), isNull);
+    });
+
+    test('ProductModel serializes sortOrder and falls back to legacy order key', () {
+      final fromSortOrder = ProductModel.fromJson({
+        'id': 'p1',
+        'restaurantId': 'r1',
+        'category': 'Burgers',
+        'name': 'Classic',
+        'priceHT': 8.0,
+        'sortOrder': 2,
+      });
+      expect(fromSortOrder.sortOrder, 2);
+      expect(fromSortOrder.toJson()['sortOrder'], 2);
+
+      final fromLegacyOrder = ProductModel.fromJson({
+        'id': 'p2',
+        'restaurantId': 'r1',
+        'category': 'Burgers',
+        'name': 'Legacy',
+        'priceHT': 9.0,
+        'order': 4.0,
+      });
+      expect(fromLegacyOrder.sortOrder, 4);
+
+      final withoutOrder = ProductModel.fromJson({
+        'id': 'p3',
+        'restaurantId': 'r1',
+        'category': 'Burgers',
+        'name': 'NoOrder',
+        'priceHT': 7.0,
+      });
+      expect(withoutOrder.sortOrder, isNull);
+      expect(withoutOrder.toJson().containsKey('sortOrder'), isFalse);
+    });
+
+    test('RestaurantModel round-trips categoryOrder and defaults to empty list', () {
+      final withOrder = RestaurantModel.fromJson({
+        'id': 'r1',
+        'name': 'Resto 1',
+        'imageUrl': '',
+        'categoryOrder': ['Burgers', ' Desserts ', '', null],
+      });
+      expect(withOrder.categoryOrder, ['Burgers', 'Desserts']);
+      expect(withOrder.toJson()['categoryOrder'], ['Burgers', 'Desserts']);
+
+      final withoutOrder = RestaurantModel.fromJson({
+        'id': 'r2',
+        'name': 'Resto 2',
+        'imageUrl': '',
+      });
+      expect(withoutOrder.categoryOrder, isEmpty);
+      expect(withoutOrder.toJson()['categoryOrder'], isEmpty);
+    });
+  });
 }
